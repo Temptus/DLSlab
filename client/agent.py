@@ -35,16 +35,19 @@ import uuid
 import webbrowser
 from typing import Optional
 
+from client.app_enforcer import AppEnforcer
 from client.blank_screen import BlankScreenOverlay
 from client.input_handler import InputHandler
 from client.screen_capture import ScreenCapture, CAPTURE_INTERVAL
 from client.student_display import StudentDisplay
 from client.teacher_display import TeacherDisplay
+from client.web_enforcer import WebEnforcer
 from server.protocol import read_message, write_message
 from shared.messages import (
     Message,
     MessageType,
     make_ping,
+    make_policy_violation,
     make_register,
     make_screenshot,
 )
@@ -113,10 +116,16 @@ class DLSlabAgent:
         self._blank_screen = BlankScreenOverlay()
         self._teacher_display = TeacherDisplay()
         self._student_display = StudentDisplay()
+        self._app_enforcer = AppEnforcer(on_violation=self._on_policy_violation)
+        self._web_enforcer = WebEnforcer(
+            app_enforcer=self._app_enforcer,
+            on_violation=self._on_policy_violation,
+        )
 
         self._writer: Optional[asyncio.StreamWriter] = None
         self._running: bool = False
         self._hires_task: Optional[asyncio.Task] = None
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -125,6 +134,7 @@ class DLSlabAgent:
     async def run(self) -> None:
         """Connect to the server and run indefinitely, reconnecting on failure."""
         self._running = True
+        self._loop = asyncio.get_running_loop()
         delay = RECONNECT_BASE_DELAY
 
         while self._running:
@@ -146,6 +156,9 @@ class DLSlabAgent:
     async def stop(self) -> None:
         """Signal the agent to stop and close the connection."""
         self._running = False
+        self._web_enforcer.clear_web_policy()
+        self._app_enforcer.clear_policy()
+        self._app_enforcer.stop()
         if self._writer:
             try:
                 self._writer.close()
@@ -182,6 +195,9 @@ class DLSlabAgent:
                 tg.create_task(self._ping_loop(writer))
         finally:
             self._cancel_hires_task()
+            self._web_enforcer.clear_web_policy()
+            self._app_enforcer.clear_policy()
+            self._app_enforcer.stop()
             self._writer = None
             try:
                 writer.close()
@@ -283,6 +299,18 @@ class DLSlabAgent:
 
         elif message.type == MessageType.STOP_SHOW_STUDENT:
             self._handle_stop_show_student(message)
+
+        elif message.type == MessageType.SET_APP_POLICY:
+            self._handle_set_app_policy(message)
+
+        elif message.type == MessageType.CLEAR_APP_POLICY:
+            self._handle_clear_app_policy()
+
+        elif message.type == MessageType.SET_WEB_POLICY:
+            self._handle_set_web_policy(message)
+
+        elif message.type == MessageType.CLEAR_WEB_POLICY:
+            self._handle_clear_web_policy()
 
         else:
             logger.debug("Ignored message type: %s", message.type)
@@ -440,6 +468,53 @@ class DLSlabAgent:
         """
         logger.info("STOP_SHOW_STUDENT received — hiding student display.")
         self._student_display.hide()
+
+    def _handle_set_app_policy(self, message: Message) -> None:
+        """Apply app whitelist/blacklist policy sent by the server."""
+        mode: str = message.payload.get("mode", "")
+        apps: list[str] = message.payload.get("apps", [])
+        if mode == "whitelist":
+            self._app_enforcer.set_whitelist(apps)
+        elif mode == "blacklist":
+            self._app_enforcer.set_blacklist(apps)
+        else:
+            logger.warning("SET_APP_POLICY ignored: unknown mode=%r", mode)
+            return
+        self._app_enforcer.start()
+        logger.info("SET_APP_POLICY applied: mode=%s apps=%d", mode, len(apps))
+
+    def _handle_clear_app_policy(self) -> None:
+        """Clear app policy and stop app monitor."""
+        self._app_enforcer.clear_policy()
+        self._app_enforcer.stop()
+        logger.info("CLEAR_APP_POLICY applied.")
+
+    def _handle_set_web_policy(self, message: Message) -> None:
+        """Apply web policy sent by the server."""
+        mode: str = message.payload.get("mode", "")
+        urls: list[str] = message.payload.get("urls", [])
+        if mode == "block_all":
+            self._web_enforcer.block_browsers()
+        elif mode == "whitelist":
+            self._web_enforcer.set_url_whitelist(urls)
+        else:
+            logger.warning("SET_WEB_POLICY ignored: unknown mode=%r", mode)
+            return
+        logger.info("SET_WEB_POLICY applied: mode=%s urls=%d", mode, len(urls))
+
+    def _handle_clear_web_policy(self) -> None:
+        """Clear web policy restrictions."""
+        self._web_enforcer.clear_web_policy()
+        logger.info("CLEAR_WEB_POLICY applied.")
+
+    def _on_policy_violation(self, process_name: str, mode: str) -> None:
+        """Send POLICY_VIOLATION asynchronously to the connected server."""
+        if not self._writer or self._loop is None:
+            return
+        message = make_policy_violation(self.client_id, process_name, mode)
+        self._loop.call_soon_threadsafe(
+            lambda: asyncio.create_task(write_message(self._writer, message))
+        )
 
     async def _hires_screenshot_loop(self, writer: asyncio.StreamWriter) -> None:
         """Capture and transmit high-resolution frames at :data:`HIRES_FPS`.

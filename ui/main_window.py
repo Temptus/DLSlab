@@ -53,6 +53,7 @@ from PyQt6.QtWidgets import (
 )
 
 from server.main_server import DLSlabServer
+from ui.policy_dialog import PolicyDialog
 from ui.thumbnail_widget import ThumbnailWidget
 
 logger = logging.getLogger(__name__)
@@ -84,6 +85,9 @@ class MainWindow(QMainWindow):
         self._streaming_clients: set[str] = set()  # client IDs receiving teacher screen
         self._presenting_client: Optional[str] = None  # client ID of active presenter
         self._watching_clients: set[str] = set()  # client IDs watching a peer presenter
+        self._app_policy_state: dict[str, str | None] = {}
+        self._web_policy_state: dict[str, str | None] = {}
+        self._pending_policy_violations: list[tuple[str, str, str]] = []
 
         self._server: Optional[DLSlabServer] = None
         self._server_thread: Optional[threading.Thread] = None
@@ -172,6 +176,13 @@ class MainWindow(QMainWindow):
         self._student_presentation_label.hide()
         toolbar.addWidget(self._student_presentation_label)
 
+        toolbar.addSeparator()
+
+        self._policy_action = QAction("🚦 Políticas", self)
+        self._policy_action.setToolTip("Configurar políticas de aplicaciones y web")
+        self._policy_action.triggered.connect(self._open_policy_dialog)
+        toolbar.addAction(self._policy_action)
+
         # ---- Central widget ----
         central = QWidget()
         self.setCentralWidget(central)
@@ -214,7 +225,10 @@ class MainWindow(QMainWindow):
     def _start_server(self) -> None:
         """Start the asyncio DLSlab server in a background thread."""
         self._loop = asyncio.new_event_loop()
-        self._server = DLSlabServer(on_screenshot=self._on_screenshot_received)
+        self._server = DLSlabServer(
+            on_screenshot=self._on_screenshot_received,
+            on_policy_violation=self._on_policy_violation,
+        )
 
         def _run() -> None:
             asyncio.set_event_loop(self._loop)
@@ -266,6 +280,10 @@ class MainWindow(QMainWindow):
             widget = self._get_or_create_thumbnail(client_id)
             widget.update_screenshot(image_b64)
             widget.set_connected(True)
+            widget.set_policy_active(
+                self._app_policy_state.get(client_id),
+                self._web_policy_state.get(client_id),
+            )
 
         # Update status bar with connected count.
         if self._server:
@@ -273,6 +291,7 @@ class MainWindow(QMainWindow):
             self._status_bar.showMessage(
                 f"Server running — {count} student(s) connected"
             )
+        self._process_policy_violations()
 
     def _get_or_create_thumbnail(self, client_id: str) -> ThumbnailWidget:
         """Return the thumbnail widget for *client_id*, creating it if needed.
@@ -294,6 +313,10 @@ class MainWindow(QMainWindow):
             widget = ThumbnailWidget(client_id=client_id, hostname=hostname)
             widget.present_requested.connect(self._on_present_requested)
             self._thumbnails[client_id] = widget
+            widget.set_policy_active(
+                self._app_policy_state.get(client_id),
+                self._web_policy_state.get(client_id),
+            )
 
             # Insert into the next grid cell.
             index = len(self._thumbnails) - 1
@@ -439,6 +462,122 @@ class MainWindow(QMainWindow):
         self._stream_action.setEnabled(True)
         self._live_label.hide()
         logger.info("Show-teacher stopped.")
+
+    # ------------------------------------------------------------------
+    # Policy control
+    # ------------------------------------------------------------------
+
+    @pyqtSlot()
+    def _open_policy_dialog(self) -> None:
+        """Open the app/web policy configuration dialog."""
+        connected_ids = list(self._thumbnails.keys())
+        dialog = PolicyDialog(connected_ids, parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        app_policy = dialog.get_app_policy()
+        web_policy = dialog.get_web_policy()
+        if dialog.clear_all_requested():
+            app_policy["mode"] = None
+            web_policy["mode"] = None
+
+        self._apply_app_policy(app_policy)
+        self._apply_web_policy(web_policy)
+
+    def _apply_app_policy(self, policy: dict[str, object]) -> None:
+        mode = policy.get("mode")
+        apps = list(policy.get("apps", []))
+        target_ids = self._resolve_target_ids(
+            bool(policy.get("all", True)),
+            list(policy.get("clients", [])),
+        )
+        if not target_ids:
+            return
+
+        if self._server and self._loop:
+            if mode in {"whitelist", "blacklist"}:
+                asyncio.run_coroutine_threadsafe(
+                    self._server.set_app_policy(target_ids, str(mode), apps),
+                    self._loop,
+                )
+            else:
+                asyncio.run_coroutine_threadsafe(
+                    self._server.clear_app_policy(target_ids),
+                    self._loop,
+                )
+
+        for cid in target_ids:
+            self._app_policy_state[cid] = str(mode) if mode else None
+            widget = self._thumbnails.get(cid)
+            if widget:
+                widget.set_policy_active(
+                    self._app_policy_state.get(cid),
+                    self._web_policy_state.get(cid),
+                )
+
+    def _apply_web_policy(self, policy: dict[str, object]) -> None:
+        mode = policy.get("mode")
+        urls = list(policy.get("urls", []))
+        target_ids = self._resolve_target_ids(
+            bool(policy.get("all", True)),
+            list(policy.get("clients", [])),
+        )
+        if not target_ids:
+            return
+
+        if self._server and self._loop:
+            if mode in {"block_all", "whitelist"}:
+                asyncio.run_coroutine_threadsafe(
+                    self._server.set_web_policy(target_ids, str(mode), urls),
+                    self._loop,
+                )
+            else:
+                asyncio.run_coroutine_threadsafe(
+                    self._server.clear_web_policy(target_ids),
+                    self._loop,
+                )
+
+        for cid in target_ids:
+            self._web_policy_state[cid] = str(mode) if mode else None
+            widget = self._thumbnails.get(cid)
+            if widget:
+                widget.set_policy_active(
+                    self._app_policy_state.get(cid),
+                    self._web_policy_state.get(cid),
+                )
+
+    def _resolve_target_ids(self, apply_all: bool, selected: list[str]) -> list[str]:
+        if apply_all:
+            return list(self._thumbnails.keys())
+        return selected
+
+    def _on_policy_violation(
+        self,
+        client_id: str,
+        process_name: str,
+        mode: str,
+    ) -> None:
+        """Thread-safe callback invoked by server when policy violation arrives."""
+        with self._lock:
+            self._pending_policy_violations.append((client_id, process_name, mode))
+
+    def _process_policy_violations(self) -> None:
+        """Show pending policy-violation notifications on the UI thread."""
+        with self._lock:
+            pending = list(self._pending_policy_violations)
+            self._pending_policy_violations.clear()
+
+        for client_id, process_name, mode in pending:
+            hostname = client_id
+            if self._server:
+                info = self._server.clients.get(client_id)
+                if info:
+                    hostname = info.hostname
+            QMessageBox.warning(
+                self,
+                "Violación de política",
+                f"⚠️ {hostname} intentó abrir {process_name}\nModo: {mode}",
+            )
 
     # ------------------------------------------------------------------
     # Show-student control

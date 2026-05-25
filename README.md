@@ -86,7 +86,7 @@ python -m client.agent --server-ip 192.168.x.x
 | `ui/thumbnail_widget.py`      | ✅ Done     | PyQt6 widget: image + hostname + status dot + lock icon |
 | `ui/main_window.py`           | ✅ Done     | PyQt6 grid + 🔒/🔓 toolbar buttons + lock dialog        |
 | Wake-on-LAN                   | 🔜 Planned  | Send WoL magic packets via `wakeonlan`                  |
-| URL whitelist / blacklist      | 🔜 Planned  | Hosts-file manipulation or local proxy                  |
+| URL whitelist / blacklist      | ✅ Done     | App + web policy controls (whitelist/blacklist)         |
 | Screen broadcast (teacher→all)| 🔜 Planned  | Stream teacher's screen to all students                 |
 | Auth / TLS                    | 🔜 Planned  | Shared-secret + TLS encryption for production use       |
 
@@ -114,6 +114,11 @@ All messages are **newline-terminated UTF-8 JSON** with this structure:
 | `COMMAND`        | server → client   | Admin commands (shutdown, open_url, …)          |
 | `BLANK_SCREEN`   | server → client   | Lock screen with overlay message                |
 | `UNBLANK_SCREEN` | server → client   | Restore screen (remove overlay)                 |
+| `SET_APP_POLICY` | server → client   | Apply app policy (whitelist / blacklist)        |
+| `CLEAR_APP_POLICY` | server → client | Remove app policy restrictions                  |
+| `SET_WEB_POLICY` | server → client   | Apply web policy (block all / URL whitelist)    |
+| `CLEAR_WEB_POLICY` | server → client | Remove web policy restrictions                  |
+| `POLICY_VIOLATION` | client → server | Report blocked app/web policy violation         |
 
 ---
 
@@ -132,11 +137,14 @@ DLSlab/
 │   └── main_server.py       # asyncio TCP server entry point
 ├── client/
 │   ├── __init__.py
+│   ├── app_enforcer.py      # Whitelist/blacklist process enforcement
 │   ├── screen_capture.py    # mss + Pillow screenshot capture
 │   ├── input_handler.py     # pynput remote input execution
+│   ├── web_enforcer.py      # Browser blocking + URL whitelist policy
 │   └── agent.py             # Student agent entry point
 └── ui/
     ├── __init__.py
+    ├── policy_dialog.py     # App/Web policy configuration dialog
     ├── thumbnail_widget.py  # Single student thumbnail widget
     └── main_window.py       # Teacher console main window
 ```
@@ -146,3 +154,14 @@ DLSlab/
 ## License
 
 MIT
+
+---
+
+## Nota sobre políticas web en Windows
+
+La política web con whitelist modifica el archivo hosts en:
+`C:\Windows\System32\drivers\etc\hosts` (con backup en
+`C:\Windows\System32\drivers\etc\hosts.dlslab.bak`).
+
+Para que esta operación funcione, el agente de alumno debe ejecutarse con
+**permisos de Administrador** en Windows.
