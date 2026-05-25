@@ -17,7 +17,14 @@ from typing import Optional
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QPainter, QPaintEvent, QPixmap
-from PyQt6.QtWidgets import QLabel, QMenu, QSizePolicy, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import (
+    QLabel,
+    QMenu,
+    QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +51,9 @@ APP_WHITELIST_BADGE: str = "🟢 APP"
 APP_BLACKLIST_BADGE: str = "🔴 APP"
 WEB_BLOCK_BADGE: str = "🚫 WEB"
 WEB_WHITELIST_BADGE: str = "✅ WEB"
+POWER_SHUTTING_DOWN_OVERLAY_COLOR: str = "rgba(255, 140, 0, 170)"
+POWER_RESTARTING_OVERLAY_COLOR: str = "rgba(33, 150, 243, 170)"
+POWER_OFFLINE_OVERLAY_COLOR: str = "rgba(30, 30, 30, 210)"
 
 
 class ThumbnailWidget(QWidget):
@@ -58,6 +68,7 @@ class ThumbnailWidget(QWidget):
     #: Emitted when the teacher right-clicks and requests to present this
     #: student's screen to the rest of the class.
     present_requested = pyqtSignal(str)  # str = client_id
+    wol_requested = pyqtSignal(str)  # str = client_id
 
     def __init__(
         self,
@@ -75,6 +86,7 @@ class ThumbnailWidget(QWidget):
         self._watching_student: bool = False
         self._app_policy: str | None = None
         self._web_policy: str | None = None
+        self._power_state: str = "online"
         self._pixmap: Optional[QPixmap] = None
 
         self._setup_ui()
@@ -201,6 +213,27 @@ class ThumbnailWidget(QWidget):
         self._web_policy_overlay.setFont(web_font)
         self._web_policy_overlay.hide()
 
+        self._power_overlay = QLabel(self._image_label)
+        self._power_overlay.setGeometry(0, 0, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT)
+        self._power_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        power_font = QFont()
+        power_font.setPointSize(16)
+        power_font.setBold(True)
+        self._power_overlay.setFont(power_font)
+        self._power_overlay.setStyleSheet(
+            "background-color: rgba(0, 0, 0, 0); color: white;"
+        )
+        self._power_overlay.hide()
+
+        self._wol_button = QPushButton("⚡ WoL", self._image_label)
+        self._wol_button.setGeometry(THUMBNAIL_WIDTH - 76, THUMBNAIL_HEIGHT - 34, 72, 28)
+        self._wol_button.setStyleSheet(
+            "QPushButton { background-color: #ffb300; color: black; font-weight: bold; border-radius: 4px; }"
+            "QPushButton:hover { background-color: #ffc947; }"
+        )
+        self._wol_button.clicked.connect(lambda: self.wol_requested.emit(self.client_id))
+        self._wol_button.hide()
+
         # --- Status row (dot + hostname) ---
         status_layout = _HBoxLayout()
         status_layout.setSpacing(6)
@@ -255,6 +288,8 @@ class ThumbnailWidget(QWidget):
         """
         self._connected = connected
         self._status_dot.set_connected(connected)
+        if connected and self._power_state == "offline":
+            self.set_power_state("online")
 
     def set_hostname(self, hostname: str) -> None:
         """Update the displayed hostname label.
@@ -401,6 +436,43 @@ class ThumbnailWidget(QWidget):
             self._web_policy_overlay.raise_()
         else:
             self._web_policy_overlay.hide()
+
+    def set_power_state(self, state: str) -> None:
+        """Set power state visual overlay.
+
+        Supported states:
+            - ``online``
+            - ``shutting_down``
+            - ``restarting``
+            - ``offline``
+        """
+        self._power_state = state
+        self._wol_button.hide()
+        if state == "shutting_down":
+            self._power_overlay.setText("⏳ Apagando...")
+            self._power_overlay.setStyleSheet(
+                f"background-color: {POWER_SHUTTING_DOWN_OVERLAY_COLOR}; color: white;"
+            )
+            self._power_overlay.show()
+            self._power_overlay.raise_()
+        elif state == "restarting":
+            self._power_overlay.setText("🔄 Reiniciando...")
+            self._power_overlay.setStyleSheet(
+                f"background-color: {POWER_RESTARTING_OVERLAY_COLOR}; color: white;"
+            )
+            self._power_overlay.show()
+            self._power_overlay.raise_()
+        elif state == "offline":
+            self._power_overlay.setText("💤 APAGADO")
+            self._power_overlay.setStyleSheet(
+                f"background-color: {POWER_OFFLINE_OVERLAY_COLOR}; color: #e0e0e0;"
+            )
+            self._power_overlay.show()
+            self._power_overlay.raise_()
+            self._wol_button.show()
+            self._wol_button.raise_()
+        else:
+            self._power_overlay.hide()
 
     def contextMenuEvent(self, event: "QContextMenuEvent") -> None:  # noqa: N802
         """Show a context menu with presentation options on right-click.

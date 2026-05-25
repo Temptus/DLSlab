@@ -28,16 +28,15 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
-import os
 import socket
 import sys
 import uuid
-import webbrowser
 from typing import Optional
 
 from client.app_enforcer import AppEnforcer
 from client.blank_screen import BlankScreenOverlay
 from client.input_handler import InputHandler
+from client.power_manager import PowerManager
 from client.screen_capture import ScreenCapture, CAPTURE_INTERVAL
 from client.student_display import StudentDisplay
 from client.teacher_display import TeacherDisplay
@@ -47,6 +46,7 @@ from shared.messages import (
     Message,
     MessageType,
     make_ping,
+    make_pong,
     make_policy_violation,
     make_register,
     make_screenshot,
@@ -61,6 +61,8 @@ DEFAULT_SERVER_PORT: int = 9000
 PING_INTERVAL: float = 5.0          # seconds between heartbeat PINGs
 RECONNECT_BASE_DELAY: float = 2.0   # initial back-off delay in seconds
 RECONNECT_MAX_DELAY: float = 60.0   # maximum back-off delay in seconds
+DEFAULT_POWER_DELAY_SECONDS: int = 5
+MIN_POWER_DELAY_SECONDS: int = 3
 
 # High-resolution capture constants (for Show Student presenter mode)
 HIRES_WIDTH: int = 1280
@@ -211,9 +213,15 @@ class DLSlabAgent:
 
     async def _send_register(self, writer: asyncio.StreamWriter) -> None:
         local_ip = self._get_local_ip()
-        msg = make_register(self.client_id, self.hostname, local_ip)
+        mac = PowerManager.get_mac_address()
+        msg = make_register(self.client_id, self.hostname, local_ip, mac=mac)
         await write_message(writer, msg)
-        logger.info("Sent REGISTER (hostname=%s, ip=%s)", self.hostname, local_ip)
+        logger.info(
+            "Sent REGISTER (hostname=%s, ip=%s, mac=%s)",
+            self.hostname,
+            local_ip,
+            mac,
+        )
 
     async def _screenshot_loop(self, writer: asyncio.StreamWriter) -> None:
         """Periodically capture and send screenshots."""
@@ -260,7 +268,6 @@ class DLSlabAgent:
             writer:  Writer used to send replies.
         """
         if message.type == MessageType.PING:
-            from shared.messages import make_pong
             await write_message(writer, make_pong(self.client_id))
             logger.debug("Replied PONG to server PING")
 
@@ -312,6 +319,24 @@ class DLSlabAgent:
         elif message.type == MessageType.CLEAR_WEB_POLICY:
             self._handle_clear_web_policy()
 
+        elif message.type == MessageType.SHUTDOWN:
+            await self._handle_shutdown(message, writer)
+
+        elif message.type == MessageType.RESTART:
+            self._handle_restart(message)
+
+        elif message.type == MessageType.LOGOUT:
+            self._handle_logout()
+
+        elif message.type == MessageType.LOCK_WORKSTATION:
+            self._handle_lock_workstation()
+
+        elif message.type == MessageType.OPEN_URL:
+            self._handle_open_url(message)
+
+        elif message.type == MessageType.RUN_APP:
+            self._handle_run_app(message)
+
         else:
             logger.debug("Ignored message type: %s", message.type)
 
@@ -342,16 +367,16 @@ class DLSlabAgent:
 
         if command == "shutdown":
             logger.warning("Shutting down by server command.")
-            os.system("shutdown /s /t 30")  # Windows: shutdown in 30 s
+            PowerManager.shutdown(30)
 
         elif command == "restart":
             logger.warning("Restarting by server command.")
-            os.system("shutdown /r /t 30")  # Windows: restart in 30 s
+            PowerManager.restart(30)
 
         elif command == "open_url":
             url: str = args.get("url", "")
             if url:
-                webbrowser.open(url)
+                PowerManager.open_url(url)
                 logger.info("Opened URL: %s", url)
             else:
                 logger.warning("open_url command missing 'url' argument.")
@@ -516,6 +541,63 @@ class DLSlabAgent:
         self._loop.call_soon_threadsafe(
             lambda: asyncio.create_task(write_message(writer, message))
         )
+
+    async def _handle_shutdown(
+        self,
+        message: Message,
+        writer: asyncio.StreamWriter,
+    ) -> None:
+        """Confirm shutdown reception and trigger delayed power-off."""
+        requested_delay = self._parse_power_delay(message.payload.get("delay"))
+        safe_delay = max(MIN_POWER_DELAY_SECONDS, requested_delay)
+        await write_message(writer, make_pong(self.client_id))
+        logger.warning("SHUTDOWN received — powering off in %d seconds.", safe_delay)
+        PowerManager.shutdown(safe_delay)
+
+    def _handle_restart(self, message: Message) -> None:
+        """Trigger delayed restart."""
+        requested_delay = self._parse_power_delay(message.payload.get("delay"))
+        safe_delay = max(MIN_POWER_DELAY_SECONDS, requested_delay)
+        logger.warning("RESTART received — restarting in %d seconds.", safe_delay)
+        PowerManager.restart(safe_delay)
+
+    def _handle_logout(self) -> None:
+        """Log out current user session."""
+        logger.warning("LOGOUT received.")
+        PowerManager.logout()
+
+    def _handle_lock_workstation(self) -> None:
+        """Lock workstation session."""
+        logger.info("LOCK_WORKSTATION received.")
+        PowerManager.lock_workstation()
+
+    def _handle_open_url(self, message: Message) -> None:
+        """Open a URL in the default browser."""
+        url = str(message.payload.get("url", "")).strip()
+        if not url:
+            logger.warning("OPEN_URL ignored: missing url.")
+            return
+        PowerManager.open_url(url)
+        logger.info("OPEN_URL executed: %s", url)
+
+    def _handle_run_app(self, message: Message) -> None:
+        """Launch an application with optional arguments."""
+        path = str(message.payload.get("path", "")).strip()
+        raw_args = message.payload.get("args", [])
+        args = [str(arg) for arg in raw_args] if isinstance(raw_args, list) else []
+        if not path:
+            logger.warning("RUN_APP ignored: missing path.")
+            return
+        PowerManager.run_app(path, args=args)
+        logger.info("RUN_APP executed: %s %s", path, args)
+
+    @staticmethod
+    def _parse_power_delay(value: object) -> int:
+        """Parse a requested power delay and return a safe integer."""
+        try:
+            return max(0, int(value))
+        except (TypeError, ValueError):
+            return DEFAULT_POWER_DELAY_SECONDS
 
     async def _hires_screenshot_loop(self, writer: asyncio.StreamWriter) -> None:
         """Capture and transmit high-resolution frames at :data:`HIRES_FPS`.

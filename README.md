@@ -71,24 +71,48 @@ python -m client.agent --server-ip 192.168.x.x
 
 ---
 
-## Module Overview
+## Módulos Implementados
 
-| Module                        | Status      | Description                                             |
-|-------------------------------|-------------|---------------------------------------------------------|
-| `shared/messages.py`          | ✅ Done     | JSON message protocol (dataclasses + helpers)           |
-| `server/protocol.py`          | ✅ Done     | TCP framing / newline-delimited message I/O             |
-| `server/client_manager.py`    | ✅ Done     | Registry of connected student agents                    |
-| `server/main_server.py`       | ✅ Done     | asyncio TCP server, dispatches all message types        |
-| `client/screen_capture.py`    | ✅ Done     | mss + Pillow screenshot → 320×180 JPEG → base64         |
-| `client/input_handler.py`     | ✅ Done     | pynput — executes remote mouse/keyboard events          |
-| `client/agent.py`             | ✅ Done     | Student agent: register, screenshot loop, PING, commands|
-| `client/blank_screen.py`      | ✅ Done     | Fullscreen overlay + pynput input blocking (suppress)   |
-| `ui/thumbnail_widget.py`      | ✅ Done     | PyQt6 widget: image + hostname + status dot + lock icon |
-| `ui/main_window.py`           | ✅ Done     | PyQt6 grid + 🔒/🔓 toolbar buttons + lock dialog        |
-| Wake-on-LAN                   | 🔜 Planned  | Send WoL magic packets via `wakeonlan`                  |
-| URL whitelist / blacklist      | ✅ Done     | App + web policy controls (whitelist/blacklist)         |
-| Screen broadcast (teacher→all)| 🔜 Planned  | Stream teacher's screen to all students                 |
-| Auth / TLS                    | 🔜 Planned  | Shared-secret + TLS encryption for production use       |
+| Módulo | Estado | Descripción |
+|--------|--------|-------------|
+| Comunicación Cliente-Servidor | ✅ | TCP asyncio, puerto 9000, protocolo JSON |
+| Thumbnails en Tiempo Real | ✅ | Captura 320×180, JPEG 40%, 2s intervalo |
+| Control Remoto | ✅ | Teclado y ratón vía pynput |
+| Bloqueo de Pantallas | ✅ | Blank screen + bloqueo de input |
+| Transmisión Pantalla Profesor | ✅ | Show Teacher, 10 FPS, 1280×720 |
+| Pantalla de Alumno | ✅ | Show Student, relay de frames |
+| Limitación Apps y Web | ✅ | Whitelist/Blacklist con psutil + hosts |
+| Control de Energía | ✅ | Apagado, reinicio, WoL, ejecución remota |
+
+## Arquitectura final
+
+- **`shared/`**: protocolo de mensajes y serialización JSON.
+- **`server/`**: servidor asyncio, registro de clientes, streamers (teacher/student),
+  políticas y módulo de energía/WoL (`wol_manager.py` + persistencia `macs.json`).
+- **`client/`**: agente de alumno con captura, input remoto, bloqueo de pantalla,
+  visualización de transmisiones, enforcement de políticas y control de energía
+  (`power_manager.py`).
+- **`ui/`**: consola PyQt6 del profesor con thumbnails en tiempo real, diálogos de
+  bloqueo/transmisión/políticas/energía y botones rápidos de emergencia.
+
+## Uso como administrador en Windows
+
+1. Instala dependencias:
+   ```bash
+   pip install -r requirements.txt
+   ```
+2. Ejecuta la consola del profesor:
+   ```bash
+   python -m ui.main_window
+   ```
+3. Ejecuta cada agente de alumno (idealmente como **Administrador** para políticas web):
+   ```bash
+   python -m client.agent --server-ip <IP_DEL_PROFESOR>
+   ```
+4. Desde la toolbar:
+   - `⚡ Energía`: abre apagado/reinicio/bloqueo/logout, apertura de URL/APP y WoL.
+   - `🔴 Apagar Todo`: apagado de emergencia con confirmación.
+5. Para Wake-on-LAN, habilita WoL en BIOS/UEFI y en la NIC de Windows.
 
 ---
 
@@ -119,6 +143,13 @@ All messages are **newline-terminated UTF-8 JSON** with this structure:
 | `SET_WEB_POLICY` | server → client   | Apply web policy (block all / URL whitelist)    |
 | `CLEAR_WEB_POLICY` | server → client | Remove web policy restrictions                  |
 | `POLICY_VIOLATION` | client → server | Report blocked app/web policy violation         |
+| `SHUTDOWN`       | server → client   | Apagar equipo con delay configurable            |
+| `RESTART`        | server → client   | Reiniciar equipo con delay configurable         |
+| `LOGOUT`         | server → client   | Cerrar sesión del usuario activo                |
+| `LOCK_WORKSTATION` | server → client | Bloquear estación de trabajo                    |
+| `OPEN_URL`       | server → client   | Abrir URL en navegador predeterminado           |
+| `RUN_APP`        | server → client   | Ejecutar aplicación con argumentos              |
+| `CLIENT_MAC`     | client → server   | Reportar MAC para Wake-on-LAN                   |
 
 ---
 
