@@ -32,6 +32,7 @@ from PyQt6.QtGui import QAction, QFont
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QGridLayout,
@@ -80,6 +81,7 @@ class MainWindow(QMainWindow):
         self._pending_screenshots: dict[str, str] = {}  # client_id -> base64 image
         self._lock = threading.Lock()
         self._blocked_clients: set[str] = set()  # client IDs currently screen-locked
+        self._streaming_clients: set[str] = set()  # client IDs receiving teacher screen
 
         self._server: Optional[DLSlabServer] = None
         self._server_thread: Optional[threading.Thread] = None
@@ -126,6 +128,29 @@ class MainWindow(QMainWindow):
         self._unlock_action.setToolTip("Restaurar pantallas de todos los alumnos")
         self._unlock_action.triggered.connect(self._unblank_all)
         toolbar.addAction(self._unlock_action)
+
+        toolbar.addSeparator()
+
+        self._stream_action = QAction("📡 Transmitir Mi Pantalla", self)
+        self._stream_action.setToolTip(
+            "Proyectar la pantalla del profesor en los monitores de los alumnos"
+        )
+        self._stream_action.triggered.connect(self._open_show_teacher_dialog)
+        toolbar.addAction(self._stream_action)
+
+        self._stop_stream_action = QAction("⏹ Detener Transmisión", self)
+        self._stop_stream_action.setToolTip("Detener la transmisión de pantalla activa")
+        self._stop_stream_action.setEnabled(False)
+        self._stop_stream_action.triggered.connect(self._stop_show_teacher)
+        toolbar.addAction(self._stop_stream_action)
+
+        # Live indicator label (hidden until streaming starts)
+        self._live_label = QLabel("  🔴 EN VIVO")
+        self._live_label.setStyleSheet(
+            "color: #ff4444; font-weight: bold; padding: 0 8px;"
+        )
+        self._live_label.hide()
+        toolbar.addWidget(self._live_label)
 
         # ---- Central widget ----
         central = QWidget()
@@ -318,6 +343,83 @@ class MainWindow(QMainWindow):
         logger.info("Unblank-screen sent to all clients.")
 
     # ------------------------------------------------------------------
+    # Show-teacher control
+    # ------------------------------------------------------------------
+
+    @pyqtSlot()
+    def _open_show_teacher_dialog(self) -> None:
+        """Open the Show Teacher configuration dialog."""
+        connected_ids = list(self._thumbnails.keys())
+        dialog = ShowTeacherDialog(connected_ids, parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        target_ids = dialog.get_selected_client_ids()
+        fps = dialog.get_fps()
+        quality = dialog.get_quality()
+
+        if not target_ids:
+            QMessageBox.warning(
+                self,
+                "Sin clientes",
+                "No hay alumnos conectados o ninguno fue seleccionado.",
+            )
+            return
+
+        self._start_show_teacher(target_ids, fps, quality)
+
+    def _start_show_teacher(
+        self,
+        client_ids: list[str],
+        fps: int,
+        quality: int,
+    ) -> None:
+        """Dispatch START_SHOW_TEACHER + start the streamer; update UI.
+
+        Args:
+            client_ids: Clients that will receive the teacher's screen.
+            fps:        Desired frame rate.
+            quality:    JPEG compression quality.
+        """
+        if self._server and self._loop:
+            asyncio.run_coroutine_threadsafe(
+                self._server.start_show_teacher(client_ids, fps=fps, quality=quality),
+                self._loop,
+            )
+        for cid in client_ids:
+            self._streaming_clients.add(cid)
+            widget = self._thumbnails.get(cid)
+            if widget:
+                widget.set_receiving_teacher(True)
+
+        self._stop_stream_action.setEnabled(True)
+        self._stream_action.setEnabled(False)
+        self._live_label.show()
+        logger.info(
+            "Show-teacher started — %d client(s) fps=%d quality=%d",
+            len(client_ids), fps, quality,
+        )
+
+    @pyqtSlot()
+    def _stop_show_teacher(self) -> None:
+        """Stop the teacher screen broadcast and update the UI."""
+        if self._server and self._loop:
+            asyncio.run_coroutine_threadsafe(
+                self._server.stop_show_teacher(None),
+                self._loop,
+            )
+        for cid in list(self._streaming_clients):
+            widget = self._thumbnails.get(cid)
+            if widget:
+                widget.set_receiving_teacher(False)
+        self._streaming_clients.clear()
+
+        self._stop_stream_action.setEnabled(False)
+        self._stream_action.setEnabled(True)
+        self._live_label.hide()
+        logger.info("Show-teacher stopped.")
+
+    # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
@@ -325,6 +427,10 @@ class MainWindow(QMainWindow):
         """Stop the server thread when the window is closed."""
         self._timer.stop()
         if self._server and self._loop:
+            if self._server._streamer.is_streaming:
+                asyncio.run_coroutine_threadsafe(
+                    self._server.stop_show_teacher(None), self._loop
+                )
             asyncio.run_coroutine_threadsafe(self._server.stop(), self._loop)
         super().closeEvent(event)
 
@@ -460,6 +566,147 @@ class BlankScreenDialog(QDialog):
         if self._radio_all.isChecked():
             return list(self._client_ids)
         return [item.text() for item in self._list_widget.selectedItems()]
+
+
+# ---------------------------------------------------------------------------
+# Show-teacher dialog
+# ---------------------------------------------------------------------------
+
+class ShowTeacherDialog(QDialog):
+    """Modal dialog for configuring and starting a teacher screen broadcast.
+
+    Lets the teacher choose target students, frame rate, and JPEG quality before
+    starting the stream.
+
+    Args:
+        client_ids: List of client identifiers currently visible in the grid.
+        parent:     Optional parent widget.
+    """
+
+    _FPS_OPTIONS: list[int] = [5, 10, 15, 20]
+    _QUALITY_OPTIONS: list[int] = [40, 60, 80]
+
+    def __init__(
+        self,
+        client_ids: list[str],
+        parent: Optional[QWidget] = None,
+    ) -> None:
+        super().__init__(parent)
+        self._client_ids = client_ids
+        self.setWindowTitle("📡 Transmitir Mi Pantalla")
+        self.setMinimumWidth(440)
+        self._setup_ui()
+
+    # ------------------------------------------------------------------
+    # UI setup
+    # ------------------------------------------------------------------
+
+    def _setup_ui(self) -> None:
+        """Build the dialog layout."""
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+        layout.setContentsMargins(16, 16, 16, 16)
+
+        # Target selection
+        layout.addWidget(QLabel("Transmitir a:"))
+
+        self._radio_all = QRadioButton("Todos los alumnos")
+        self._radio_all.setChecked(True)
+        self._radio_all.toggled.connect(self._toggle_list)
+        layout.addWidget(self._radio_all)
+
+        self._radio_selected = QRadioButton("Alumnos seleccionados:")
+        layout.addWidget(self._radio_selected)
+
+        self._list_widget = QListWidget()
+        self._list_widget.setEnabled(False)
+        self._list_widget.setSelectionMode(
+            QListWidget.SelectionMode.MultiSelection
+        )
+        for cid in self._client_ids:
+            item = QListWidgetItem(cid)
+            self._list_widget.addItem(item)
+        layout.addWidget(self._list_widget)
+
+        # FPS selector
+        fps_row = QHBoxLayout()
+        fps_row.addWidget(QLabel("Fotogramas por segundo (FPS):"))
+        self._fps_combo = QComboBox()
+        for fps in self._FPS_OPTIONS:
+            self._fps_combo.addItem(str(fps), fps)
+        self._fps_combo.setCurrentIndex(1)  # default 10 FPS
+        fps_row.addWidget(self._fps_combo)
+        fps_row.addStretch()
+        layout.addLayout(fps_row)
+
+        # Quality selector
+        quality_row = QHBoxLayout()
+        quality_row.addWidget(QLabel("Calidad JPEG:"))
+        self._quality_combo = QComboBox()
+        for q in self._QUALITY_OPTIONS:
+            self._quality_combo.addItem(f"{q}%", q)
+        self._quality_combo.setCurrentIndex(1)  # default 60%
+        quality_row.addWidget(self._quality_combo)
+        quality_row.addStretch()
+        layout.addLayout(quality_row)
+
+        # Buttons
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText(
+            "Iniciar Transmisión"
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    # ------------------------------------------------------------------
+    # Slots
+    # ------------------------------------------------------------------
+
+    @pyqtSlot(bool)
+    def _toggle_list(self, all_selected: bool) -> None:
+        """Enable or disable the client list based on the radio selection.
+
+        Args:
+            all_selected: ``True`` when "Todos los alumnos" is active.
+        """
+        self._list_widget.setEnabled(not all_selected)
+
+    # ------------------------------------------------------------------
+    # Public result accessors
+    # ------------------------------------------------------------------
+
+    def get_selected_client_ids(self) -> list[str]:
+        """Return the list of client IDs to stream to.
+
+        If "Todos los alumnos" is selected, returns all client IDs.  Otherwise,
+        returns only the IDs highlighted in the list widget.
+
+        Returns:
+            List of client identifier strings.
+        """
+        if self._radio_all.isChecked():
+            return list(self._client_ids)
+        return [item.text() for item in self._list_widget.selectedItems()]
+
+    def get_fps(self) -> int:
+        """Return the selected frame rate.
+
+        Returns:
+            Selected FPS as an integer.
+        """
+        return self._fps_combo.currentData()
+
+    def get_quality(self) -> int:
+        """Return the selected JPEG quality.
+
+        Returns:
+            Selected quality as an integer (0–100).
+        """
+        return self._quality_combo.currentData()
 
 
 if __name__ == "__main__":
