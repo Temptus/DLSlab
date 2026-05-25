@@ -31,6 +31,9 @@ STATUS_INDICATOR_SIZE: int = 10   # px — diameter of the coloured dot
 BLOCKED_OVERLAY_COLOR: str = "rgba(180, 0, 0, 160)"  # semi-transparent red
 BLOCKED_BORDER_COLOR: str = "#cc0000"                 # solid red border
 BLOCKED_ICON: str = "🔒"
+TEACHER_OVERLAY_COLOR: str = "rgba(0, 80, 200, 160)"  # semi-transparent blue
+TEACHER_BORDER_COLOR: str = "#1565c0"                  # solid blue border
+TEACHER_ICON: str = "📡 EN VIVO"
 
 
 class ThumbnailWidget(QWidget):
@@ -53,6 +56,7 @@ class ThumbnailWidget(QWidget):
         self._hostname = hostname
         self._connected: bool = False
         self._blocked: bool = False
+        self._receiving_teacher: bool = False
         self._pixmap: Optional[QPixmap] = None
 
         self._setup_ui()
@@ -89,6 +93,31 @@ class ThumbnailWidget(QWidget):
         self._block_overlay.setFont(font)
         self._block_overlay.setText(BLOCKED_ICON)
         self._block_overlay.hide()
+
+        # --- Teacher live overlay (hidden by default) ---
+        self._teacher_overlay = QLabel(self._image_label)
+        # Positioned in the top-right corner; size adapts to content
+        self._teacher_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._teacher_overlay.setStyleSheet(
+            f"background-color: {TEACHER_OVERLAY_COLOR}; color: white;"
+            " border-radius: 4px; padding: 2px 6px;"
+        )
+        teacher_font = QFont()
+        teacher_font.setPointSize(9)
+        teacher_font.setBold(True)
+        self._teacher_overlay.setFont(teacher_font)
+        self._teacher_overlay.setText(TEACHER_ICON)
+        self._teacher_overlay.adjustSize()
+        # Place in top-right corner with a small margin
+        overlay_w = self._teacher_overlay.width()
+        overlay_h = self._teacher_overlay.height()
+        self._teacher_overlay.setGeometry(
+            THUMBNAIL_WIDTH - overlay_w - 4,
+            4,
+            overlay_w,
+            overlay_h,
+        )
+        self._teacher_overlay.hide()
 
         # --- Status row (dot + hostname) ---
         status_layout = _HBoxLayout()
@@ -176,6 +205,30 @@ class ThumbnailWidget(QWidget):
             )
         else:
             self._block_overlay.hide()
+            self.setStyleSheet("background-color: #2b2b2b; border-radius: 4px;")
+
+    def set_receiving_teacher(self, receiving: bool) -> None:
+        """Show or hide the teacher-live indicator on this thumbnail.
+
+        When ``receiving`` is ``True``, a 📡 EN VIVO badge with a blue
+        background appears in the upper-right corner of the thumbnail and the
+        widget border turns blue.  When ``False``, the badge is removed and the
+        widget returns to its normal appearance.
+
+        Args:
+            receiving: ``True`` to mark the student as receiving the teacher's
+                       screen; ``False`` to restore normal appearance.
+        """
+        self._receiving_teacher = receiving
+        if receiving:
+            self._teacher_overlay.show()
+            self._teacher_overlay.raise_()
+            self.setStyleSheet(
+                f"background-color: #2b2b2b; border-radius: 4px;"
+                f" border: 2px solid {TEACHER_BORDER_COLOR};"
+            )
+        else:
+            self._teacher_overlay.hide()
             self.setStyleSheet("background-color: #2b2b2b; border-radius: 4px;")
 
 

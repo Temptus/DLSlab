@@ -36,6 +36,9 @@ class MessageType(str, Enum):
     COMMAND = "COMMAND"
     BLANK_SCREEN = "BLANK_SCREEN"
     UNBLANK_SCREEN = "UNBLANK_SCREEN"
+    START_SHOW_TEACHER = "START_SHOW_TEACHER"
+    STOP_SHOW_TEACHER = "STOP_SHOW_TEACHER"
+    TEACHER_FRAME = "TEACHER_FRAME"
 
 
 # ---------------------------------------------------------------------------
@@ -215,6 +218,55 @@ def make_unblank_screen(server_id: str) -> Message:
         type=MessageType.UNBLANK_SCREEN,
         client_id=server_id,
         payload={},
+    )
+
+
+def make_start_show_teacher(server_id: str) -> Message:
+    """Build a START_SHOW_TEACHER message sent from the server to a client.
+
+    Args:
+        server_id: Identifier of the server.
+
+    Returns:
+        A :class:`Message` of type START_SHOW_TEACHER.
+    """
+    return Message(
+        type=MessageType.START_SHOW_TEACHER,
+        client_id=server_id,
+        payload={},
+    )
+
+
+def make_stop_show_teacher(server_id: str) -> Message:
+    """Build a STOP_SHOW_TEACHER message sent from the server to a client.
+
+    Args:
+        server_id: Identifier of the server.
+
+    Returns:
+        A :class:`Message` of type STOP_SHOW_TEACHER.
+    """
+    return Message(
+        type=MessageType.STOP_SHOW_TEACHER,
+        client_id=server_id,
+        payload={},
+    )
+
+
+def make_teacher_frame(server_id: str, frame_b64: str) -> Message:
+    """Build a TEACHER_FRAME message carrying a base64-encoded JPEG frame.
+
+    Args:
+        server_id:  Identifier of the server.
+        frame_b64:  Base64-encoded JPEG of the teacher's screen.
+
+    Returns:
+        A :class:`Message` of type TEACHER_FRAME.
+    """
+    return Message(
+        type=MessageType.TEACHER_FRAME,
+        client_id=server_id,
+        payload={"frame": frame_b64},
     )
 
 

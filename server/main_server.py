@@ -34,11 +34,14 @@ from typing import Callable
 
 from server.client_manager import ClientManager
 from server.protocol import read_message, write_message
+from server.screen_streamer import TeacherScreenStreamer
 from shared.messages import (
     Message,
     MessageType,
     make_blank_screen,
     make_pong,
+    make_start_show_teacher,
+    make_stop_show_teacher,
     make_unblank_screen,
 )
 
@@ -95,6 +98,7 @@ class DLSlabServer:
         self._on_screenshot = on_screenshot
         self.clients = ClientManager()
         self._server: asyncio.AbstractServer | None = None
+        self._streamer = TeacherScreenStreamer(self)
 
     # ------------------------------------------------------------------
     # Public API
@@ -181,6 +185,62 @@ class DLSlabServer:
         for cid in targets:
             await self.send_to_client(cid, msg)
         logger.info("unblank_screen sent to %d client(s).", len(targets))
+
+    async def start_show_teacher(
+        self,
+        client_ids: list[str] | None,
+        fps: int | None = None,
+        quality: int | None = None,
+    ) -> None:
+        """Begin broadcasting the teacher's screen to one or more clients.
+
+        Sends a ``START_SHOW_TEACHER`` notification so clients can prepare
+        their display, then starts the :class:`~server.screen_streamer.TeacherScreenStreamer`.
+
+        Args:
+            client_ids: List of client identifiers to target.  Pass ``None``
+                        to broadcast to **all** currently connected clients.
+            fps:        Optional frame-rate override for this session.
+            quality:    Optional JPEG quality override for this session.
+        """
+        targets = (
+            list(self.clients.all_client_ids())
+            if client_ids is None
+            else client_ids
+        )
+        msg = make_start_show_teacher("server")
+        for cid in targets:
+            await self.send_to_client(cid, msg)
+
+        self._streamer.start(client_ids=client_ids, fps=fps, quality=quality)
+        logger.info(
+            "start_show_teacher — targets=%s fps=%s quality=%s",
+            "all" if client_ids is None else len(targets),
+            fps,
+            quality,
+        )
+
+    async def stop_show_teacher(self, client_ids: list[str] | None) -> None:
+        """Stop broadcasting the teacher's screen and notify clients.
+
+        Stops the :class:`~server.screen_streamer.TeacherScreenStreamer`, then
+        sends a ``STOP_SHOW_TEACHER`` notification to the relevant clients.
+
+        Args:
+            client_ids: List of client identifiers to notify.  Pass ``None``
+                        to notify **all** currently connected clients.
+        """
+        self._streamer.stop()
+
+        targets = (
+            list(self.clients.all_client_ids())
+            if client_ids is None
+            else client_ids
+        )
+        msg = make_stop_show_teacher("server")
+        for cid in targets:
+            await self.send_to_client(cid, msg)
+        logger.info("stop_show_teacher sent to %d client(s).", len(targets))
 
     # ------------------------------------------------------------------
     # Internal handlers

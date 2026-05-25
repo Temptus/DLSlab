@@ -38,6 +38,7 @@ from typing import Optional
 from client.blank_screen import BlankScreenOverlay
 from client.input_handler import InputHandler
 from client.screen_capture import ScreenCapture, CAPTURE_INTERVAL
+from client.teacher_display import TeacherDisplay
 from server.protocol import read_message, write_message
 from shared.messages import (
     Message,
@@ -102,6 +103,7 @@ class DLSlabAgent:
             logger.warning("Remote input disabled: %s", exc)
 
         self._blank_screen = BlankScreenOverlay()
+        self._teacher_display = TeacherDisplay()
 
         self._writer: Optional[asyncio.StreamWriter] = None
         self._running: bool = False
@@ -247,6 +249,15 @@ class DLSlabAgent:
         elif message.type == MessageType.UNBLANK_SCREEN:
             self._handle_unblank_screen(message)
 
+        elif message.type == MessageType.START_SHOW_TEACHER:
+            self._handle_start_show_teacher(message)
+
+        elif message.type == MessageType.TEACHER_FRAME:
+            self._handle_teacher_frame(message)
+
+        elif message.type == MessageType.STOP_SHOW_TEACHER:
+            self._handle_stop_show_teacher(message)
+
         else:
             logger.debug("Ignored message type: %s", message.type)
 
@@ -316,6 +327,34 @@ class DLSlabAgent:
         """
         logger.info("UNBLANK_SCREEN received — hiding overlay.")
         self._blank_screen.hide()
+
+    def _handle_start_show_teacher(self, message: Message) -> None:
+        """Open the teacher-display fullscreen window.
+
+        Args:
+            message: A START_SHOW_TEACHER message from the server.
+        """
+        logger.info("START_SHOW_TEACHER received — showing teacher display.")
+        self._teacher_display.show()
+
+    def _handle_teacher_frame(self, message: Message) -> None:
+        """Render an incoming teacher screen frame.
+
+        Args:
+            message: A TEACHER_FRAME message carrying a base64-encoded JPEG.
+        """
+        frame_b64: str = message.payload.get("frame", "")
+        if frame_b64:
+            self._teacher_display.update_frame(frame_b64)
+
+    def _handle_stop_show_teacher(self, message: Message) -> None:
+        """Close the teacher-display window.
+
+        Args:
+            message: A STOP_SHOW_TEACHER message from the server.
+        """
+        logger.info("STOP_SHOW_TEACHER received — hiding teacher display.")
+        self._teacher_display.hide()
 
     # ------------------------------------------------------------------
     # Utilities
