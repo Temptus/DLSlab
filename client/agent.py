@@ -509,11 +509,12 @@ class DLSlabAgent:
 
     def _on_policy_violation(self, process_name: str, mode: str) -> None:
         """Send POLICY_VIOLATION asynchronously to the connected server."""
-        if not self._writer or self._loop is None:
+        writer = self._writer
+        if writer is None or self._loop is None:
             return
         message = make_policy_violation(self.client_id, process_name, mode)
         self._loop.call_soon_threadsafe(
-            lambda: asyncio.create_task(write_message(self._writer, message))
+            lambda: asyncio.create_task(write_message(writer, message))
         )
 
     async def _hires_screenshot_loop(self, writer: asyncio.StreamWriter) -> None:
