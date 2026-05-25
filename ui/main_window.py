@@ -82,6 +82,8 @@ class MainWindow(QMainWindow):
         self._lock = threading.Lock()
         self._blocked_clients: set[str] = set()  # client IDs currently screen-locked
         self._streaming_clients: set[str] = set()  # client IDs receiving teacher screen
+        self._presenting_client: Optional[str] = None  # client ID of active presenter
+        self._watching_clients: set[str] = set()  # client IDs watching a peer presenter
 
         self._server: Optional[DLSlabServer] = None
         self._server_thread: Optional[threading.Thread] = None
@@ -151,6 +153,24 @@ class MainWindow(QMainWindow):
         )
         self._live_label.hide()
         toolbar.addWidget(self._live_label)
+
+        toolbar.addSeparator()
+
+        self._stop_student_action = QAction("⏹ Detener Presentación", self)
+        self._stop_student_action.setToolTip(
+            "Detener la presentación de alumno activa"
+        )
+        self._stop_student_action.setEnabled(False)
+        self._stop_student_action.triggered.connect(self._stop_show_student)
+        toolbar.addAction(self._stop_student_action)
+
+        # Presentation indicator label (hidden until a student is presenting)
+        self._student_presentation_label = QLabel()
+        self._student_presentation_label.setStyleSheet(
+            "color: #66bb6a; font-weight: bold; padding: 0 8px;"
+        )
+        self._student_presentation_label.hide()
+        toolbar.addWidget(self._student_presentation_label)
 
         # ---- Central widget ----
         central = QWidget()
@@ -272,6 +292,7 @@ class MainWindow(QMainWindow):
                     hostname = info.hostname
 
             widget = ThumbnailWidget(client_id=client_id, hostname=hostname)
+            widget.present_requested.connect(self._on_present_requested)
             self._thumbnails[client_id] = widget
 
             # Insert into the next grid cell.
@@ -420,6 +441,89 @@ class MainWindow(QMainWindow):
         logger.info("Show-teacher stopped.")
 
     # ------------------------------------------------------------------
+    # Show-student control
+    # ------------------------------------------------------------------
+
+    @pyqtSlot(str)
+    def _on_present_requested(self, client_id: str) -> None:
+        """Slot called when the teacher right-clicks a thumbnail and requests
+        to present that student's screen to the rest of the class.
+
+        Args:
+            client_id: The client ID of the student to present.
+        """
+        self._start_show_student(client_id)
+
+    def _start_show_student(self, presenter_id: str) -> None:
+        """Dispatch start-show-student commands and update the UI.
+
+        Args:
+            presenter_id: Client ID of the student who will present.
+        """
+        # Stop any existing student presentation first.
+        if self._presenting_client is not None:
+            self._stop_show_student()
+
+        if self._server and self._loop:
+            asyncio.run_coroutine_threadsafe(
+                self._server.start_show_student(presenter_id, None),
+                self._loop,
+            )
+
+        # Update local tracking state.
+        all_ids = list(self._thumbnails.keys())
+        self._presenting_client = presenter_id
+        self._watching_clients = {cid for cid in all_ids if cid != presenter_id}
+
+        # Update badges on each thumbnail.
+        for cid, widget in self._thumbnails.items():
+            if cid == presenter_id:
+                widget.set_presenting(True)
+            elif cid in self._watching_clients:
+                widget.set_watching_student(True)
+
+        # Update toolbar and status.
+        self._stop_student_action.setEnabled(True)
+        presenter_name = presenter_id
+        if self._server:
+            info = self._server.clients.get(presenter_id)
+            if info:
+                presenter_name = info.hostname
+        self._student_presentation_label.setText(
+            f"  🎓 {presenter_name} está presentando"
+        )
+        self._student_presentation_label.show()
+        logger.info("Show-student started — presenter=%s", presenter_id)
+
+    @pyqtSlot()
+    def _stop_show_student(self) -> None:
+        """Stop the student presentation session and update the UI."""
+        if self._server and self._loop:
+            asyncio.run_coroutine_threadsafe(
+                self._server.stop_show_student(),
+                self._loop,
+            )
+
+        # Clear presenter badge.
+        if self._presenting_client:
+            widget = self._thumbnails.get(self._presenting_client)
+            if widget:
+                widget.set_presenting(False)
+
+        # Clear audience badges.
+        for cid in self._watching_clients:
+            widget = self._thumbnails.get(cid)
+            if widget:
+                widget.set_watching_student(False)
+
+        self._presenting_client = None
+        self._watching_clients.clear()
+
+        self._stop_student_action.setEnabled(False)
+        self._student_presentation_label.hide()
+        logger.info("Show-student stopped.")
+
+    # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
@@ -430,6 +534,10 @@ class MainWindow(QMainWindow):
             if self._server._streamer.is_streaming:
                 asyncio.run_coroutine_threadsafe(
                     self._server.stop_show_teacher(None), self._loop
+                )
+            if self._server._student_streamer.is_streaming:
+                asyncio.run_coroutine_threadsafe(
+                    self._server.stop_show_student(), self._loop
                 )
             asyncio.run_coroutine_threadsafe(self._server.stop(), self._loop)
         super().closeEvent(event)

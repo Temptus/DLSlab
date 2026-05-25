@@ -38,6 +38,7 @@ from typing import Optional
 from client.blank_screen import BlankScreenOverlay
 from client.input_handler import InputHandler
 from client.screen_capture import ScreenCapture, CAPTURE_INTERVAL
+from client.student_display import StudentDisplay
 from client.teacher_display import TeacherDisplay
 from server.protocol import read_message, write_message
 from shared.messages import (
@@ -57,6 +58,13 @@ DEFAULT_SERVER_PORT: int = 9000
 PING_INTERVAL: float = 5.0          # seconds between heartbeat PINGs
 RECONNECT_BASE_DELAY: float = 2.0   # initial back-off delay in seconds
 RECONNECT_MAX_DELAY: float = 60.0   # maximum back-off delay in seconds
+
+# High-resolution capture constants (for Show Student presenter mode)
+HIRES_WIDTH: int = 1280
+HIRES_HEIGHT: int = 720
+HIRES_QUALITY: int = 60
+HIRES_FPS: int = 10
+HIRES_INTERVAL: float = 1.0 / HIRES_FPS  # ~100 ms between hires frames
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -104,9 +112,11 @@ class DLSlabAgent:
 
         self._blank_screen = BlankScreenOverlay()
         self._teacher_display = TeacherDisplay()
+        self._student_display = StudentDisplay()
 
         self._writer: Optional[asyncio.StreamWriter] = None
         self._running: bool = False
+        self._hires_task: Optional[asyncio.Task] = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -171,6 +181,7 @@ class DLSlabAgent:
                 tg.create_task(self._screenshot_loop(writer))
                 tg.create_task(self._ping_loop(writer))
         finally:
+            self._cancel_hires_task()
             self._writer = None
             try:
                 writer.close()
@@ -257,6 +268,21 @@ class DLSlabAgent:
 
         elif message.type == MessageType.STOP_SHOW_TEACHER:
             self._handle_stop_show_teacher(message)
+
+        elif message.type == MessageType.REQUEST_HIRES_SCREENSHOT:
+            await self._handle_request_hires_screenshot(writer)
+
+        elif message.type == MessageType.STOP_HIRES_SCREENSHOT:
+            self._handle_stop_hires_screenshot()
+
+        elif message.type == MessageType.START_SHOW_STUDENT:
+            self._handle_start_show_student(message)
+
+        elif message.type == MessageType.STUDENT_FRAME:
+            self._handle_student_frame(message)
+
+        elif message.type == MessageType.STOP_SHOW_STUDENT:
+            self._handle_stop_show_student(message)
 
         else:
             logger.debug("Ignored message type: %s", message.type)
@@ -355,6 +381,99 @@ class DLSlabAgent:
         """
         logger.info("STOP_SHOW_TEACHER received — hiding teacher display.")
         self._teacher_display.hide()
+
+    async def _handle_request_hires_screenshot(
+        self, writer: asyncio.StreamWriter
+    ) -> None:
+        """Start the high-resolution screenshot streaming loop.
+
+        Cancels any pre-existing hires task before creating a new one.
+
+        Args:
+            writer: The active connection writer used to send frames.
+        """
+        self._cancel_hires_task()
+        loop = asyncio.get_event_loop()
+        self._hires_task = loop.create_task(self._hires_screenshot_loop(writer))
+        logger.info(
+            "REQUEST_HIRES_SCREENSHOT received — hires capture started (%d FPS).",
+            HIRES_FPS,
+        )
+
+    def _handle_stop_hires_screenshot(self) -> None:
+        """Cancel the high-resolution screenshot loop.
+
+        Safe to call even when no hires task is active.
+        """
+        self._cancel_hires_task()
+        logger.info("STOP_HIRES_SCREENSHOT received — hires capture stopped.")
+
+    def _handle_start_show_student(self, message: Message) -> None:
+        """Open the student-display fullscreen window.
+
+        Args:
+            message: A START_SHOW_STUDENT message with ``presenter_name`` and
+                     ``presenter_id`` in the payload.
+        """
+        presenter_name: str = message.payload.get("presenter_name", "Alumno")
+        logger.info(
+            "START_SHOW_STUDENT received — showing student display for %r.",
+            presenter_name,
+        )
+        self._student_display.show(presenter_name)
+
+    def _handle_student_frame(self, message: Message) -> None:
+        """Render an incoming student screen frame.
+
+        Args:
+            message: A STUDENT_FRAME message carrying a base64-encoded JPEG.
+        """
+        frame_b64: str = message.payload.get("frame", "")
+        if frame_b64:
+            self._student_display.update_frame(frame_b64)
+
+    def _handle_stop_show_student(self, message: Message) -> None:
+        """Close the student-display window.
+
+        Args:
+            message: A STOP_SHOW_STUDENT message from the server.
+        """
+        logger.info("STOP_SHOW_STUDENT received — hiding student display.")
+        self._student_display.hide()
+
+    async def _hires_screenshot_loop(self, writer: asyncio.StreamWriter) -> None:
+        """Capture and transmit high-resolution frames at :data:`HIRES_FPS`.
+
+        Each frame is sent as a ``SCREENSHOT`` message with ``hires=True`` in
+        the payload so the server can distinguish it from normal thumbnails.
+
+        Args:
+            writer: The active connection writer used to send frames.
+        """
+        hires_capture = ScreenCapture(
+            width=HIRES_WIDTH, height=HIRES_HEIGHT, quality=HIRES_QUALITY
+        )
+        while True:
+            await asyncio.sleep(HIRES_INTERVAL)
+            image_b64 = hires_capture.capture()
+            if image_b64:
+                msg = Message(
+                    type=MessageType.SCREENSHOT,
+                    client_id=self.client_id,
+                    payload={"image": image_b64, "hires": True},
+                )
+                try:
+                    await write_message(writer, msg)
+                except (ConnectionResetError, BrokenPipeError, OSError):
+                    logger.warning("Hires capture: connection lost, stopping loop.")
+                    break
+                logger.debug("Sent hires SCREENSHOT (%d chars)", len(image_b64))
+
+    def _cancel_hires_task(self) -> None:
+        """Cancel the hires screenshot task if it is currently running."""
+        if self._hires_task and not self._hires_task.done():
+            self._hires_task.cancel()
+        self._hires_task = None
 
     # ------------------------------------------------------------------
     # Utilities

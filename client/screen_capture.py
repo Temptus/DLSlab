@@ -122,3 +122,28 @@ class ScreenCapture:
 
         # Encode as base64.
         return base64.b64encode(jpeg_bytes).decode("ascii")
+
+
+# ---------------------------------------------------------------------------
+# Module-level helper
+# ---------------------------------------------------------------------------
+
+def capture_frame(
+    width: int = THUMBNAIL_WIDTH,
+    height: int = THUMBNAIL_HEIGHT,
+    quality: int = JPEG_QUALITY,
+) -> Optional[str]:
+    """Capture the primary monitor with the specified resolution and quality.
+
+    Convenience wrapper around :class:`ScreenCapture` that creates a
+    temporary instance for a single-shot capture.
+
+    Args:
+        width:   Width of the output image in pixels.
+        height:  Height of the output image in pixels.
+        quality: JPEG compression quality (0–95).
+
+    Returns:
+        A base64-encoded JPEG string, or ``None`` if the capture fails.
+    """
+    return ScreenCapture(width=width, height=height, quality=quality).capture()
