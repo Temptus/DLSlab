@@ -116,6 +116,59 @@ python -m client.agent --server-ip 192.168.x.x
 
 ---
 
+## 📦 Build y Distribución
+
+### Requisitos para compilar
+- Windows 10/11
+- Python 3.11+
+- Las dependencias de `requirements.txt`
+
+### Compilar los ejecutables
+
+**Opción 1 — Script batch:**
+```bat
+build\build.bat
+```
+
+**Opción 2 — PowerShell:**
+```powershell
+# Compilar todo
+.\build\build.ps1
+
+# Solo el servidor
+.\build\build.ps1 -ServerOnly
+
+# Solo el agente
+.\build\build.ps1 -AgentOnly
+
+# Limpiar y recompilar
+.\build\build.ps1 -Clean
+```
+
+### Archivos generados
+Tras el build, encontrarás en la carpeta `dist\`:
+
+| Archivo | Destino | Admin requerido |
+|---------|---------|----------------|
+| `DLSlab_Server.exe` | PC del Profesor | No |
+| `DLSlab_Agent.exe` | PCs de Alumnos | Sí |
+
+### Despliegue del agente
+1. Copiar `DLSlab_Agent.exe` a cada PC del laboratorio
+2. Ejecutar como Administrador
+3. Al iniciar: `DLSlab_Agent.exe --server-ip 192.168.x.x`
+
+### Despliegue masivo (PowerShell + red compartida)
+```powershell
+# Copiar agente a todos los equipos del laboratorio
+$computers = @("PC-LAB-01", "PC-LAB-02", "PC-LAB-03")  # etc.
+foreach ($pc in $computers) {
+    Copy-Item "dist\DLSlab_Agent.exe" "\\$pc\C$\DLSlab\"
+}
+```
+
+---
+
 ## Message Protocol
 
 All messages are **newline-terminated UTF-8 JSON** with this structure:
