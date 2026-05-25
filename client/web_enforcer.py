@@ -87,20 +87,31 @@ class _WhitelistProxyHandler(BaseHTTPRequestHandler):
         self.send_error(403, "HTTPS proxy tunneling is blocked by policy.")
 
     def _forward_request(self, method: str) -> None:
-        target_url = self.path
-        parsed = urlparse(target_url)
-        if not parsed.scheme:
-            host = self.headers.get("Host", "")
-            target_url = f"http://{host}{self.path}"
-            parsed = urlparse(target_url)
+        parsed = urlparse(self.path)
+        if parsed.scheme and parsed.scheme.lower() != "http":
+            self.send_error(403, "Only HTTP URLs are supported by policy proxy.")
+            return
 
-        domain = (parsed.hostname or "").lower()
+        if parsed.scheme:
+            domain = (parsed.hostname or "").lower()
+            path = parsed.path or "/"
+            if parsed.query:
+                path = f"{path}?{parsed.query}"
+        else:
+            host_header = self.headers.get("Host", "")
+            domain = host_header.split(":", 1)[0].lower()
+            path = self.path or "/"
+
+        if not path.startswith("/"):
+            path = "/" + path
+
         if not domain or not self.server.is_allowed(domain):
             if domain:
                 self.server.report_violation(domain)
             self.send_error(403, "Blocked by DLSlab web policy.")
             return
 
+        target_url = f"http://{domain}{path}"
         try:
             req = Request(target_url, method=method)
             with urlopen(req, timeout=8) as response:  # noqa: S310
@@ -321,4 +332,3 @@ class WebEnforcer:
             if parsed.hostname:
                 domains.add(parsed.hostname.lower())
         return domains
-
