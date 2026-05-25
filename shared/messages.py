@@ -39,6 +39,11 @@ class MessageType(str, Enum):
     START_SHOW_TEACHER = "START_SHOW_TEACHER"
     STOP_SHOW_TEACHER = "STOP_SHOW_TEACHER"
     TEACHER_FRAME = "TEACHER_FRAME"
+    START_SHOW_STUDENT = "START_SHOW_STUDENT"
+    STOP_SHOW_STUDENT = "STOP_SHOW_STUDENT"
+    STUDENT_FRAME = "STUDENT_FRAME"
+    REQUEST_HIRES_SCREENSHOT = "REQUEST_HIRES_SCREENSHOT"
+    STOP_HIRES_SCREENSHOT = "STOP_HIRES_SCREENSHOT"
 
 
 # ---------------------------------------------------------------------------
@@ -265,6 +270,93 @@ def make_teacher_frame(server_id: str, frame_b64: str) -> Message:
     """
     return Message(
         type=MessageType.TEACHER_FRAME,
+        client_id=server_id,
+        payload={"frame": frame_b64},
+    )
+
+
+def make_request_hires_screenshot(server_id: str) -> Message:
+    """Build a REQUEST_HIRES_SCREENSHOT message sent from the server to the presenter client.
+
+    Args:
+        server_id: Identifier of the server.
+
+    Returns:
+        A :class:`Message` of type REQUEST_HIRES_SCREENSHOT.
+    """
+    return Message(
+        type=MessageType.REQUEST_HIRES_SCREENSHOT,
+        client_id=server_id,
+        payload={},
+    )
+
+
+def make_stop_hires_screenshot(server_id: str) -> Message:
+    """Build a STOP_HIRES_SCREENSHOT message sent from the server to the presenter client.
+
+    Args:
+        server_id: Identifier of the server.
+
+    Returns:
+        A :class:`Message` of type STOP_HIRES_SCREENSHOT.
+    """
+    return Message(
+        type=MessageType.STOP_HIRES_SCREENSHOT,
+        client_id=server_id,
+        payload={},
+    )
+
+
+def make_start_show_student(
+    server_id: str,
+    presenter_name: str,
+    presenter_id: str,
+) -> Message:
+    """Build a START_SHOW_STUDENT message sent from the server to audience clients.
+
+    Args:
+        server_id:      Identifier of the server.
+        presenter_name: Human-readable name of the presenting student.
+        presenter_id:   Unique client ID of the presenting student.
+
+    Returns:
+        A :class:`Message` of type START_SHOW_STUDENT.
+    """
+    return Message(
+        type=MessageType.START_SHOW_STUDENT,
+        client_id=server_id,
+        payload={"presenter_name": presenter_name, "presenter_id": presenter_id},
+    )
+
+
+def make_stop_show_student(server_id: str) -> Message:
+    """Build a STOP_SHOW_STUDENT message sent from the server to audience clients.
+
+    Args:
+        server_id: Identifier of the server.
+
+    Returns:
+        A :class:`Message` of type STOP_SHOW_STUDENT.
+    """
+    return Message(
+        type=MessageType.STOP_SHOW_STUDENT,
+        client_id=server_id,
+        payload={},
+    )
+
+
+def make_student_frame(server_id: str, frame_b64: str) -> Message:
+    """Build a STUDENT_FRAME message carrying a base64-encoded JPEG frame.
+
+    Args:
+        server_id:  Identifier of the server.
+        frame_b64:  Base64-encoded JPEG of the presenting student's screen.
+
+    Returns:
+        A :class:`Message` of type STUDENT_FRAME.
+    """
+    return Message(
+        type=MessageType.STUDENT_FRAME,
         client_id=server_id,
         payload={"frame": frame_b64},
     )

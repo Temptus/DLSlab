@@ -35,12 +35,17 @@ from typing import Callable
 from server.client_manager import ClientManager
 from server.protocol import read_message, write_message
 from server.screen_streamer import TeacherScreenStreamer
+from server.student_streamer import StudentStreamer
 from shared.messages import (
     Message,
     MessageType,
     make_blank_screen,
     make_pong,
+    make_request_hires_screenshot,
+    make_start_show_student,
     make_start_show_teacher,
+    make_stop_hires_screenshot,
+    make_stop_show_student,
     make_stop_show_teacher,
     make_unblank_screen,
 )
@@ -99,6 +104,7 @@ class DLSlabServer:
         self.clients = ClientManager()
         self._server: asyncio.AbstractServer | None = None
         self._streamer = TeacherScreenStreamer(self)
+        self._student_streamer = StudentStreamer(self)
 
     # ------------------------------------------------------------------
     # Public API
@@ -242,6 +248,106 @@ class DLSlabServer:
             await self.send_to_client(cid, msg)
         logger.info("stop_show_teacher sent to %d client(s).", len(targets))
 
+    async def start_show_student(
+        self,
+        presenter_id: str,
+        audience_ids: list[str] | None,
+    ) -> None:
+        """Begin a Show Student session for the given presenter.
+
+        Sends ``REQUEST_HIRES_SCREENSHOT`` to the presenter so it starts
+        streaming high-resolution frames, and sends ``START_SHOW_STUDENT`` to
+        the audience so they open the :class:`~client.student_display.StudentDisplay`.
+
+        If a Show Student session is already active it is stopped first.
+
+        Args:
+            presenter_id: Client ID of the student who will present.
+            audience_ids: Explicit list of audience client IDs.  Pass ``None``
+                          to target **all** currently connected clients except
+                          the presenter.
+        """
+        if self._student_streamer.is_streaming:
+            await self.stop_show_student()
+
+        # Resolve audience list before starting.
+        all_ids = list(self.clients.all_client_ids())
+        resolved_audience: list[str] = (
+            [cid for cid in all_ids if cid != presenter_id]
+            if audience_ids is None
+            else audience_ids
+        )
+
+        # Look up presenter hostname for the banner text.
+        presenter_info = self.clients.get(presenter_id)
+        presenter_name: str = (
+            presenter_info.hostname if presenter_info else presenter_id
+        )
+
+        # Tell the presenter to start sending hires frames.
+        await self.send_to_client(
+            presenter_id, make_request_hires_screenshot("server")
+        )
+
+        # Tell the audience to open the student display.
+        msg = make_start_show_student("server", presenter_name, presenter_id)
+        for cid in resolved_audience:
+            await self.send_to_client(cid, msg)
+
+        # Activate the relay streamer.
+        self._student_streamer.start(
+            presenter_id=presenter_id,
+            audience_ids=resolved_audience,
+        )
+        logger.info(
+            "start_show_student — presenter=%s name=%r audience=%d client(s)",
+            presenter_id,
+            presenter_name,
+            len(resolved_audience),
+        )
+
+    async def stop_show_student(self) -> None:
+        """Stop the active Show Student session and notify all parties.
+
+        Sends ``STOP_HIRES_SCREENSHOT`` to the presenter and
+        ``STOP_SHOW_STUDENT`` to the audience, then deactivates the streamer.
+
+        Safe to call even when no session is active.
+        """
+        if not self._student_streamer.is_streaming:
+            return
+
+        presenter_id = self._student_streamer.presenter_id
+        audience_ids: list[str] = (
+            [
+                cid
+                for cid in self.clients.all_client_ids()
+                if cid != presenter_id
+            ]
+            if self._student_streamer._audience_ids is None  # noqa: SLF001
+            else list(self._student_streamer._audience_ids)  # noqa: SLF001
+        )
+
+        # Stop the relay before sending messages so no stale frames are forwarded.
+        self._student_streamer.stop()
+
+        # Tell the presenter to stop sending hires frames.
+        if presenter_id:
+            await self.send_to_client(
+                presenter_id, make_stop_hires_screenshot("server")
+            )
+
+        # Tell the audience to close their student displays.
+        msg = make_stop_show_student("server")
+        for cid in audience_ids:
+            await self.send_to_client(cid, msg)
+
+        logger.info(
+            "stop_show_student — notified presenter=%s and %d audience client(s).",
+            presenter_id,
+            len(audience_ids),
+        )
+
     # ------------------------------------------------------------------
     # Internal handlers
     # ------------------------------------------------------------------
@@ -285,6 +391,17 @@ class DLSlabServer:
         finally:
             if client_id:
                 self.clients.remove(client_id)
+                # If the disconnecting client is the active presenter, stop the
+                # show-student session so the audience windows close automatically.
+                if (
+                    self._student_streamer.is_streaming
+                    and self._student_streamer.presenter_id == client_id
+                ):
+                    logger.info(
+                        "Presenter %s disconnected — stopping show-student session.",
+                        client_id,
+                    )
+                    await self.stop_show_student()
             try:
                 writer.close()
                 await writer.wait_closed()
@@ -341,13 +458,24 @@ class DLSlabServer:
         peer_ip: str,
     ) -> None:
         image_b64: str = message.payload.get("image", "")
-        logger.debug(
-            "SCREENSHOT from %s (%d bytes base64)",
-            message.client_id,
-            len(image_b64),
-        )
-        if self._on_screenshot:
-            self._on_screenshot(message.client_id, image_b64)
+        is_hires: bool = bool(message.payload.get("hires", False))
+
+        if is_hires:
+            # High-resolution frame from the presenter — relay to audience.
+            if (
+                self._student_streamer.is_streaming
+                and message.client_id == self._student_streamer.presenter_id
+            ):
+                await self._student_streamer.relay_frame(image_b64)
+        else:
+            # Normal thumbnail — pass to the UI callback.
+            logger.debug(
+                "SCREENSHOT from %s (%d bytes base64)",
+                message.client_id,
+                len(image_b64),
+            )
+            if self._on_screenshot:
+                self._on_screenshot(message.client_id, image_b64)
 
     async def _handle_ping(
         self,

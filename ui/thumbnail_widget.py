@@ -15,9 +15,9 @@ import base64
 import logging
 from typing import Optional
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QPainter, QPaintEvent, QPixmap
-from PyQt6.QtWidgets import QLabel, QSizePolicy, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QLabel, QMenu, QSizePolicy, QVBoxLayout, QWidget
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +34,12 @@ BLOCKED_ICON: str = "🔒"
 TEACHER_OVERLAY_COLOR: str = "rgba(0, 80, 200, 160)"  # semi-transparent blue
 TEACHER_BORDER_COLOR: str = "#1565c0"                  # solid blue border
 TEACHER_ICON: str = "📡 EN VIVO"
+PRESENTING_OVERLAY_COLOR: str = "rgba(0, 140, 60, 180)"  # semi-transparent green
+PRESENTING_BORDER_COLOR: str = "#1b7a3a"                  # solid green border
+PRESENTING_ICON: str = "🎤 PRESENTANDO"
+WATCHING_OVERLAY_COLOR: str = "rgba(0, 100, 200, 160)"   # semi-transparent blue
+WATCHING_BORDER_COLOR: str = "#0d5faa"                    # solid blue border
+WATCHING_ICON: str = "👁️ VIENDO"
 
 
 class ThumbnailWidget(QWidget):
@@ -44,6 +50,10 @@ class ThumbnailWidget(QWidget):
         hostname:  Human-readable name shown below the thumbnail.
         parent:    Optional parent widget.
     """
+
+    #: Emitted when the teacher right-clicks and requests to present this
+    #: student's screen to the rest of the class.
+    present_requested = pyqtSignal(str)  # str = client_id
 
     def __init__(
         self,
@@ -57,6 +67,8 @@ class ThumbnailWidget(QWidget):
         self._connected: bool = False
         self._blocked: bool = False
         self._receiving_teacher: bool = False
+        self._presenting: bool = False
+        self._watching_student: bool = False
         self._pixmap: Optional[QPixmap] = None
 
         self._setup_ui()
@@ -118,6 +130,45 @@ class ThumbnailWidget(QWidget):
             overlay_h,
         )
         self._teacher_overlay.hide()
+
+        # --- Presenting badge (top-left, green) — hidden by default ---
+        self._presenting_overlay = QLabel(self._image_label)
+        self._presenting_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._presenting_overlay.setStyleSheet(
+            f"background-color: {PRESENTING_OVERLAY_COLOR}; color: white;"
+            " border-radius: 4px; padding: 2px 6px;"
+        )
+        presenting_font = QFont()
+        presenting_font.setPointSize(9)
+        presenting_font.setBold(True)
+        self._presenting_overlay.setFont(presenting_font)
+        self._presenting_overlay.setText(PRESENTING_ICON)
+        self._presenting_overlay.adjustSize()
+        self._presenting_overlay.move(4, 4)
+        self._presenting_overlay.hide()
+
+        # --- Watching student badge (top-right, blue) — hidden by default ---
+        self._watching_overlay = QLabel(self._image_label)
+        self._watching_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._watching_overlay.setStyleSheet(
+            f"background-color: {WATCHING_OVERLAY_COLOR}; color: white;"
+            " border-radius: 4px; padding: 2px 6px;"
+        )
+        watching_font = QFont()
+        watching_font.setPointSize(9)
+        watching_font.setBold(True)
+        self._watching_overlay.setFont(watching_font)
+        self._watching_overlay.setText(WATCHING_ICON)
+        self._watching_overlay.adjustSize()
+        watching_w = self._watching_overlay.width()
+        watching_h = self._watching_overlay.height()
+        self._watching_overlay.setGeometry(
+            THUMBNAIL_WIDTH - watching_w - 4,
+            4,
+            watching_w,
+            watching_h,
+        )
+        self._watching_overlay.hide()
 
         # --- Status row (dot + hostname) ---
         status_layout = _HBoxLayout()
@@ -230,6 +281,62 @@ class ThumbnailWidget(QWidget):
         else:
             self._teacher_overlay.hide()
             self.setStyleSheet("background-color: #2b2b2b; border-radius: 4px;")
+
+    def set_presenting(self, presenting: bool) -> None:
+        """Show or hide the presenter badge on this thumbnail.
+
+        When ``presenting`` is ``True``, a semi-transparent green 🎤 PRESENTANDO
+        badge appears in the upper-left corner of the thumbnail and the widget
+        border turns green.  When ``False``, the badge is removed.
+
+        Args:
+            presenting: ``True`` to mark this student as the active presenter.
+        """
+        self._presenting = presenting
+        if presenting:
+            self._presenting_overlay.show()
+            self._presenting_overlay.raise_()
+            self.setStyleSheet(
+                f"background-color: #2b2b2b; border-radius: 4px;"
+                f" border: 2px solid {PRESENTING_BORDER_COLOR};"
+            )
+        else:
+            self._presenting_overlay.hide()
+            self.setStyleSheet("background-color: #2b2b2b; border-radius: 4px;")
+
+    def set_watching_student(self, watching: bool) -> None:
+        """Show or hide the audience-watching badge on this thumbnail.
+
+        When ``watching`` is ``True``, a semi-transparent blue 👁️ VIENDO badge
+        appears in the upper-right corner of the thumbnail and the widget border
+        turns blue.  When ``False``, the badge is removed.
+
+        Args:
+            watching: ``True`` to mark this student as watching a peer presenter.
+        """
+        self._watching_student = watching
+        if watching:
+            self._watching_overlay.show()
+            self._watching_overlay.raise_()
+            self.setStyleSheet(
+                f"background-color: #2b2b2b; border-radius: 4px;"
+                f" border: 2px solid {WATCHING_BORDER_COLOR};"
+            )
+        else:
+            self._watching_overlay.hide()
+            self.setStyleSheet("background-color: #2b2b2b; border-radius: 4px;")
+
+    def contextMenuEvent(self, event: "QContextMenuEvent") -> None:  # noqa: N802
+        """Show a context menu with presentation options on right-click.
+
+        Args:
+            event: The Qt context-menu event triggered by a right-click.
+        """
+        menu = QMenu(self)
+        present_action = menu.addAction("📺 Presentar al resto")
+        action = menu.exec(event.globalPos())
+        if action == present_action:
+            self.present_requested.emit(self.client_id)
 
 
 # ---------------------------------------------------------------------------
