@@ -44,6 +44,11 @@ class MessageType(str, Enum):
     STUDENT_FRAME = "STUDENT_FRAME"
     REQUEST_HIRES_SCREENSHOT = "REQUEST_HIRES_SCREENSHOT"
     STOP_HIRES_SCREENSHOT = "STOP_HIRES_SCREENSHOT"
+    SET_APP_POLICY = "SET_APP_POLICY"
+    CLEAR_APP_POLICY = "CLEAR_APP_POLICY"
+    SET_WEB_POLICY = "SET_WEB_POLICY"
+    CLEAR_WEB_POLICY = "CLEAR_WEB_POLICY"
+    POLICY_VIOLATION = "POLICY_VIOLATION"
 
 
 # ---------------------------------------------------------------------------
@@ -382,4 +387,58 @@ def make_command(server_id: str, target_client_id: str, command: str, args: dict
             "command": command,
             "args": args or {},
         },
+    )
+
+
+def make_set_app_policy(server_id: str, mode: str, apps: list[str]) -> Message:
+    """Build a SET_APP_POLICY message.
+
+    Args:
+        server_id: Identifier of the server.
+        mode:      Policy mode (``"whitelist"`` or ``"blacklist"``).
+        apps:      Process names used by the policy.
+
+    Returns:
+        A :class:`Message` of type SET_APP_POLICY.
+    """
+    return Message(
+        type=MessageType.SET_APP_POLICY,
+        client_id=server_id,
+        payload={"mode": mode, "apps": apps},
+    )
+
+
+def make_clear_app_policy(server_id: str) -> Message:
+    """Build a CLEAR_APP_POLICY message."""
+    return Message(
+        type=MessageType.CLEAR_APP_POLICY,
+        client_id=server_id,
+        payload={},
+    )
+
+
+def make_set_web_policy(server_id: str, mode: str, urls: list[str]) -> Message:
+    """Build a SET_WEB_POLICY message."""
+    return Message(
+        type=MessageType.SET_WEB_POLICY,
+        client_id=server_id,
+        payload={"mode": mode, "urls": urls},
+    )
+
+
+def make_clear_web_policy(server_id: str) -> Message:
+    """Build a CLEAR_WEB_POLICY message."""
+    return Message(
+        type=MessageType.CLEAR_WEB_POLICY,
+        client_id=server_id,
+        payload={},
+    )
+
+
+def make_policy_violation(client_id: str, process_name: str, mode: str) -> Message:
+    """Build a POLICY_VIOLATION message emitted by a client."""
+    return Message(
+        type=MessageType.POLICY_VIOLATION,
+        client_id=client_id,
+        payload={"process_name": process_name, "mode": mode},
     )

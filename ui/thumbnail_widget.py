@@ -40,6 +40,10 @@ PRESENTING_ICON: str = "🎤 PRESENTANDO"
 WATCHING_OVERLAY_COLOR: str = "rgba(0, 100, 200, 160)"   # semi-transparent blue
 WATCHING_BORDER_COLOR: str = "#0d5faa"                    # solid blue border
 WATCHING_ICON: str = "👁️ VIENDO"
+APP_WHITELIST_BADGE: str = "🟢 APP"
+APP_BLACKLIST_BADGE: str = "🔴 APP"
+WEB_BLOCK_BADGE: str = "🚫 WEB"
+WEB_WHITELIST_BADGE: str = "✅ WEB"
 
 
 class ThumbnailWidget(QWidget):
@@ -69,6 +73,8 @@ class ThumbnailWidget(QWidget):
         self._receiving_teacher: bool = False
         self._presenting: bool = False
         self._watching_student: bool = False
+        self._app_policy: str | None = None
+        self._web_policy: str | None = None
         self._pixmap: Optional[QPixmap] = None
 
         self._setup_ui()
@@ -169,6 +175,31 @@ class ThumbnailWidget(QWidget):
             watching_h,
         )
         self._watching_overlay.hide()
+
+        # --- Policy badges (bottom corners) ---
+        self._app_policy_overlay = QLabel(self._image_label)
+        self._app_policy_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._app_policy_overlay.setStyleSheet(
+            "background-color: rgba(20, 20, 20, 180); color: white;"
+            " border-radius: 4px; padding: 2px 6px;"
+        )
+        app_font = QFont()
+        app_font.setPointSize(8)
+        app_font.setBold(True)
+        self._app_policy_overlay.setFont(app_font)
+        self._app_policy_overlay.hide()
+
+        self._web_policy_overlay = QLabel(self._image_label)
+        self._web_policy_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._web_policy_overlay.setStyleSheet(
+            "background-color: rgba(20, 20, 20, 180); color: white;"
+            " border-radius: 4px; padding: 2px 6px;"
+        )
+        web_font = QFont()
+        web_font.setPointSize(8)
+        web_font.setBold(True)
+        self._web_policy_overlay.setFont(web_font)
+        self._web_policy_overlay.hide()
 
         # --- Status row (dot + hostname) ---
         status_layout = _HBoxLayout()
@@ -325,6 +356,51 @@ class ThumbnailWidget(QWidget):
         else:
             self._watching_overlay.hide()
             self.setStyleSheet("background-color: #2b2b2b; border-radius: 4px;")
+
+    def set_policy_active(
+        self,
+        app_policy: str | None,
+        web_policy: str | None,
+    ) -> None:
+        """Update compact app/web policy badges on the thumbnail."""
+        self._app_policy = app_policy
+        self._web_policy = web_policy
+
+        if app_policy == "whitelist":
+            self._app_policy_overlay.setText(APP_WHITELIST_BADGE)
+            self._app_policy_overlay.adjustSize()
+            self._app_policy_overlay.move(4, THUMBNAIL_HEIGHT - self._app_policy_overlay.height() - 4)
+            self._app_policy_overlay.show()
+            self._app_policy_overlay.raise_()
+        elif app_policy == "blacklist":
+            self._app_policy_overlay.setText(APP_BLACKLIST_BADGE)
+            self._app_policy_overlay.adjustSize()
+            self._app_policy_overlay.move(4, THUMBNAIL_HEIGHT - self._app_policy_overlay.height() - 4)
+            self._app_policy_overlay.show()
+            self._app_policy_overlay.raise_()
+        else:
+            self._app_policy_overlay.hide()
+
+        if web_policy == "block_all":
+            self._web_policy_overlay.setText(WEB_BLOCK_BADGE)
+            self._web_policy_overlay.adjustSize()
+            self._web_policy_overlay.move(
+                THUMBNAIL_WIDTH - self._web_policy_overlay.width() - 4,
+                THUMBNAIL_HEIGHT - self._web_policy_overlay.height() - 4,
+            )
+            self._web_policy_overlay.show()
+            self._web_policy_overlay.raise_()
+        elif web_policy == "whitelist":
+            self._web_policy_overlay.setText(WEB_WHITELIST_BADGE)
+            self._web_policy_overlay.adjustSize()
+            self._web_policy_overlay.move(
+                THUMBNAIL_WIDTH - self._web_policy_overlay.width() - 4,
+                THUMBNAIL_HEIGHT - self._web_policy_overlay.height() - 4,
+            )
+            self._web_policy_overlay.show()
+            self._web_policy_overlay.raise_()
+        else:
+            self._web_policy_overlay.hide()
 
     def contextMenuEvent(self, event: "QContextMenuEvent") -> None:  # noqa: N802
         """Show a context menu with presentation options on right-click.

@@ -76,6 +76,8 @@ logger = logging.getLogger(__name__)
 
 # Signature: (client_id: str, image_b64: str) -> None
 ScreenshotCallback = Callable[[str, str], None]
+# Signature: (client_id: str, process_name: str, mode: str) -> None
+PolicyViolationCallback = Callable[[str, str, str], None]
 
 
 # ---------------------------------------------------------------------------
@@ -97,10 +99,12 @@ class DLSlabServer:
         host: str = SERVER_HOST,
         port: int = SERVER_PORT,
         on_screenshot: ScreenshotCallback | None = None,
+        on_policy_violation: PolicyViolationCallback | None = None,
     ) -> None:
         self.host = host
         self.port = port
         self._on_screenshot = on_screenshot
+        self._on_policy_violation = on_policy_violation
         self.clients = ClientManager()
         self._server: asyncio.AbstractServer | None = None
         self._streamer = TeacherScreenStreamer(self)
@@ -348,6 +352,52 @@ class DLSlabServer:
             len(audience_ids),
         )
 
+    async def set_app_policy(
+        self,
+        client_ids: list[str] | None,
+        mode: str,
+        apps: list[str],
+    ) -> None:
+        """Send SET_APP_POLICY to target clients."""
+        msg = Message(
+            type=MessageType.SET_APP_POLICY,
+            client_id="server",
+            payload={"mode": mode, "apps": apps},
+        )
+        targets = list(self.clients.all_client_ids()) if client_ids is None else client_ids
+        for cid in targets:
+            await self.send_to_client(cid, msg)
+
+    async def clear_app_policy(self, client_ids: list[str] | None) -> None:
+        """Send CLEAR_APP_POLICY to target clients."""
+        msg = Message(type=MessageType.CLEAR_APP_POLICY, client_id="server", payload={})
+        targets = list(self.clients.all_client_ids()) if client_ids is None else client_ids
+        for cid in targets:
+            await self.send_to_client(cid, msg)
+
+    async def set_web_policy(
+        self,
+        client_ids: list[str] | None,
+        mode: str,
+        urls: list[str],
+    ) -> None:
+        """Send SET_WEB_POLICY to target clients."""
+        msg = Message(
+            type=MessageType.SET_WEB_POLICY,
+            client_id="server",
+            payload={"mode": mode, "urls": urls},
+        )
+        targets = list(self.clients.all_client_ids()) if client_ids is None else client_ids
+        for cid in targets:
+            await self.send_to_client(cid, msg)
+
+    async def clear_web_policy(self, client_ids: list[str] | None) -> None:
+        """Send CLEAR_WEB_POLICY to target clients."""
+        msg = Message(type=MessageType.CLEAR_WEB_POLICY, client_id="server", payload={})
+        targets = list(self.clients.all_client_ids()) if client_ids is None else client_ids
+        for cid in targets:
+            await self.send_to_client(cid, msg)
+
     # ------------------------------------------------------------------
     # Internal handlers
     # ------------------------------------------------------------------
@@ -427,6 +477,7 @@ class DLSlabServer:
             MessageType.REGISTER: self._handle_register,
             MessageType.SCREENSHOT: self._handle_screenshot,
             MessageType.PING: self._handle_ping,
+            MessageType.POLICY_VIOLATION: self._handle_policy_violation,
         }
 
         handler = handlers.get(message.type)
@@ -486,6 +537,24 @@ class DLSlabServer:
         pong = make_pong("server")
         await write_message(writer, pong)
         logger.debug("PING/PONG with %s", message.client_id)
+
+    async def _handle_policy_violation(
+        self,
+        message: Message,
+        writer: asyncio.StreamWriter,
+        peer_ip: str,
+    ) -> None:
+        """Handle POLICY_VIOLATION reports from clients."""
+        process_name = message.payload.get("process_name", "")
+        mode = message.payload.get("mode", "")
+        logger.warning(
+            "POLICY_VIOLATION from %s: process=%r mode=%r",
+            message.client_id,
+            process_name,
+            mode,
+        )
+        if self._on_policy_violation:
+            self._on_policy_violation(message.client_id, process_name, mode)
 
 
 # ---------------------------------------------------------------------------
