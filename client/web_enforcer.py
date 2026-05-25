@@ -118,10 +118,8 @@ class _WhitelistProxyHandler(BaseHTTPRequestHandler):
             response = connection.getresponse()
             body = response.read()
             self.send_response(response.status)
-            for key, value in response.getheaders():
-                if key.lower() == "transfer-encoding":
-                    continue
-                self.send_header(key, value)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             if method != "HEAD":
                 self.wfile.write(body)
