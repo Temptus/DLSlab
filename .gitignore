@@ -3,13 +3,20 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.pyo
+*.pyd
+.Python
+*.egg-info/
+*.egg
 
 # Distribution / packaging
 .eggs/
 dist/
-build/
-*.egg-info/
-*.egg
+
+# PyInstaller build artefacts (work dir only; spec files are tracked)
+build/work/
+*.spec.bak
+*.spec~
+*.manifest
 
 # Virtual environments
 .venv/
@@ -23,8 +30,14 @@ ENV/
 *.swp
 *.swo
 
+# DLSlab runtime files
+macs.json
+hosts.dlslab.bak
+*.log
+
 # macOS
 .DS_Store
 
 # Windows
 Thumbs.db
+desktop.ini
