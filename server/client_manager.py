@@ -126,6 +126,14 @@ class ClientManager:
         """
         yield from self._clients.values()
 
+    def all_client_ids(self) -> Iterator[str]:
+        """Iterate over all currently registered client identifiers.
+
+        Yields:
+            Client ID strings for every registered client.
+        """
+        yield from self._clients.keys()
+
     def __len__(self) -> int:
         return len(self._clients)
 

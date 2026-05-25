@@ -28,6 +28,9 @@ logger = logging.getLogger(__name__)
 THUMBNAIL_WIDTH: int = 320
 THUMBNAIL_HEIGHT: int = 180
 STATUS_INDICATOR_SIZE: int = 10   # px — diameter of the coloured dot
+BLOCKED_OVERLAY_COLOR: str = "rgba(180, 0, 0, 160)"  # semi-transparent red
+BLOCKED_BORDER_COLOR: str = "#cc0000"                 # solid red border
+BLOCKED_ICON: str = "🔒"
 
 
 class ThumbnailWidget(QWidget):
@@ -49,6 +52,7 @@ class ThumbnailWidget(QWidget):
         self.client_id = client_id
         self._hostname = hostname
         self._connected: bool = False
+        self._blocked: bool = False
         self._pixmap: Optional[QPixmap] = None
 
         self._setup_ui()
@@ -72,6 +76,19 @@ class ThumbnailWidget(QWidget):
         )
         self._image_label.setText("No signal")
         layout.addWidget(self._image_label)
+
+        # --- Block overlay (hidden by default) ---
+        self._block_overlay = QLabel(self._image_label)
+        self._block_overlay.setGeometry(0, 0, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT)
+        self._block_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._block_overlay.setStyleSheet(
+            f"background-color: {BLOCKED_OVERLAY_COLOR}; color: white;"
+        )
+        font = QFont()
+        font.setPointSize(28)
+        self._block_overlay.setFont(font)
+        self._block_overlay.setText(BLOCKED_ICON)
+        self._block_overlay.hide()
 
         # --- Status row (dot + hostname) ---
         status_layout = _HBoxLayout()
@@ -136,6 +153,30 @@ class ThumbnailWidget(QWidget):
         """
         self._hostname = hostname
         self._hostname_label.setText(hostname)
+
+    def set_blocked(self, blocked: bool) -> None:
+        """Show or hide the blocked-screen visual indicator on this thumbnail.
+
+        When ``blocked`` is ``True``, a semi-transparent red overlay with a
+        🔒 icon is drawn over the thumbnail and the widget border turns red.
+        When ``False``, the overlay is removed and the widget returns to its
+        normal appearance.
+
+        Args:
+            blocked: ``True`` to mark the student as screen-locked;
+                     ``False`` to restore normal appearance.
+        """
+        self._blocked = blocked
+        if blocked:
+            self._block_overlay.show()
+            self._block_overlay.raise_()
+            self.setStyleSheet(
+                f"background-color: #2b2b2b; border-radius: 4px;"
+                f" border: 2px solid {BLOCKED_BORDER_COLOR};"
+            )
+        else:
+            self._block_overlay.hide()
+            self.setStyleSheet("background-color: #2b2b2b; border-radius: 4px;")
 
 
 # ---------------------------------------------------------------------------
