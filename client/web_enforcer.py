@@ -11,6 +11,7 @@ Implements:
 from __future__ import annotations
 
 import atexit
+import http.client
 import logging
 import os
 import threading
@@ -18,7 +19,6 @@ from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
 
 import psutil
 
@@ -82,7 +82,7 @@ class _WhitelistProxyHandler(BaseHTTPRequestHandler):
 
     def do_CONNECT(self) -> None:  # noqa: N802
         domain = self.path.split(":", 1)[0].lower()
-        if not self.server.is_allowed(domain):
+        if self.server.get_allowed_domain(domain) is None:
             self.server.report_violation(domain)
         self.send_error(403, "HTTPS proxy tunneling is blocked by policy.")
 
@@ -105,27 +105,29 @@ class _WhitelistProxyHandler(BaseHTTPRequestHandler):
         if not path.startswith("/"):
             path = "/" + path
 
-        if not domain or not self.server.is_allowed(domain):
+        allowed_domain = self.server.get_allowed_domain(domain)
+        if not domain or allowed_domain is None:
             if domain:
                 self.server.report_violation(domain)
             self.send_error(403, "Blocked by DLSlab web policy.")
             return
 
-        target_url = f"http://{domain}{path}"
         try:
-            req = Request(target_url, method=method)
-            with urlopen(req, timeout=8) as response:  # noqa: S310
-                body = response.read()
-                self.send_response(response.status)
-                for key, value in response.headers.items():
-                    if key.lower() == "transfer-encoding":
-                        continue
-                    self.send_header(key, value)
-                self.end_headers()
-                if method != "HEAD":
-                    self.wfile.write(body)
+            connection = http.client.HTTPConnection(allowed_domain, timeout=8)
+            connection.request(method, path)
+            response = connection.getresponse()
+            body = response.read()
+            self.send_response(response.status)
+            for key, value in response.getheaders():
+                if key.lower() == "transfer-encoding":
+                    continue
+                self.send_header(key, value)
+            self.end_headers()
+            if method != "HEAD":
+                self.wfile.write(body)
+            connection.close()
         except Exception as exc:
-            logger.debug("Proxy forward failed for %s: %s", target_url, exc)
+            logger.debug("Proxy forward failed for domain=%s path=%s: %s", allowed_domain, path, exc)
             self.send_error(502, "Proxy forwarding error.")
 
     def log_message(self, format: str, *args: object) -> None:  # noqa: A003
@@ -147,11 +149,14 @@ class _WhitelistProxyServer(ThreadingHTTPServer):
         self._on_violation = on_violation
         super().__init__((host, port), _WhitelistProxyHandler)
 
-    def is_allowed(self, domain: str) -> bool:
-        """Return whether the requested domain is allowed."""
+    def get_allowed_domain(self, domain: str) -> str | None:
+        """Return canonical allowlisted domain if *domain* is permitted."""
         if domain in self._allowed_domains:
-            return True
-        return any(domain.endswith(f".{allowed}") for allowed in self._allowed_domains)
+            return domain
+        for allowed in self._allowed_domains:
+            if domain.endswith(f".{allowed}"):
+                return allowed
+        return None
 
     def report_violation(self, domain: str) -> None:
         """Emit a policy-violation callback for blocked domain access."""
