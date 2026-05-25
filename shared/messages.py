@@ -34,6 +34,8 @@ class MessageType(str, Enum):
     PING = "PING"
     PONG = "PONG"
     COMMAND = "COMMAND"
+    BLANK_SCREEN = "BLANK_SCREEN"
+    UNBLANK_SCREEN = "UNBLANK_SCREEN"
 
 
 # ---------------------------------------------------------------------------
@@ -181,6 +183,39 @@ def make_pong(sender_id: str) -> Message:
         A :class:`Message` of type PONG.
     """
     return Message(type=MessageType.PONG, client_id=sender_id)
+
+
+def make_blank_screen(server_id: str, message: str = "Atención al frente") -> Message:
+    """Build a BLANK_SCREEN message sent from the server to a client.
+
+    Args:
+        server_id: Identifier of the server.
+        message:   Text to display on the student's screen overlay.
+
+    Returns:
+        A :class:`Message` of type BLANK_SCREEN.
+    """
+    return Message(
+        type=MessageType.BLANK_SCREEN,
+        client_id=server_id,
+        payload={"message": message},
+    )
+
+
+def make_unblank_screen(server_id: str) -> Message:
+    """Build an UNBLANK_SCREEN message sent from the server to a client.
+
+    Args:
+        server_id: Identifier of the server.
+
+    Returns:
+        A :class:`Message` of type UNBLANK_SCREEN.
+    """
+    return Message(
+        type=MessageType.UNBLANK_SCREEN,
+        client_id=server_id,
+        payload={},
+    )
 
 
 def make_command(server_id: str, target_client_id: str, command: str, args: dict[str, Any] | None = None) -> Message:

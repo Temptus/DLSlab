@@ -37,7 +37,9 @@ from server.protocol import read_message, write_message
 from shared.messages import (
     Message,
     MessageType,
+    make_blank_screen,
     make_pong,
+    make_unblank_screen,
 )
 
 # ---------------------------------------------------------------------------
@@ -138,6 +140,47 @@ class DLSlabServer:
         except (ConnectionResetError, BrokenPipeError, OSError) as exc:
             logger.warning("Failed to send to %s: %s", client_id, exc)
             return False
+
+    async def blank_screen(
+        self,
+        client_ids: list[str] | None,
+        message: str = "Atención al frente",
+    ) -> None:
+        """Send a BLANK_SCREEN command to one or more connected clients.
+
+        Args:
+            client_ids: List of client identifiers to target.  Pass ``None``
+                        to broadcast to **all** currently connected clients.
+            message:    Text that will be displayed on the student's screen.
+        """
+        msg = make_blank_screen("server", message)
+        targets = (
+            list(self.clients.all_client_ids())
+            if client_ids is None
+            else client_ids
+        )
+        for cid in targets:
+            await self.send_to_client(cid, msg)
+        logger.info(
+            "blank_screen sent to %d client(s) — message=%r", len(targets), message
+        )
+
+    async def unblank_screen(self, client_ids: list[str] | None) -> None:
+        """Send an UNBLANK_SCREEN command to one or more connected clients.
+
+        Args:
+            client_ids: List of client identifiers to target.  Pass ``None``
+                        to broadcast to **all** currently connected clients.
+        """
+        msg = make_unblank_screen("server")
+        targets = (
+            list(self.clients.all_client_ids())
+            if client_ids is None
+            else client_ids
+        )
+        for cid in targets:
+            await self.send_to_client(cid, msg)
+        logger.info("unblank_screen sent to %d client(s).", len(targets))
 
     # ------------------------------------------------------------------
     # Internal handlers

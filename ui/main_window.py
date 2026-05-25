@@ -31,12 +31,22 @@ from PyQt6.QtCore import QTimer, Qt, pyqtSlot
 from PyQt6.QtGui import QAction, QFont
 from PyQt6.QtWidgets import (
     QApplication,
+    QCheckBox,
+    QDialog,
+    QDialogButtonBox,
     QGridLayout,
+    QHBoxLayout,
     QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMainWindow,
     QMenuBar,
+    QMessageBox,
+    QRadioButton,
     QScrollArea,
     QStatusBar,
+    QToolBar,
     QVBoxLayout,
     QWidget,
 )
@@ -69,6 +79,7 @@ class MainWindow(QMainWindow):
         self._thumbnails: dict[str, ThumbnailWidget] = {}
         self._pending_screenshots: dict[str, str] = {}  # client_id -> base64 image
         self._lock = threading.Lock()
+        self._blocked_clients: set[str] = set()  # client IDs currently screen-locked
 
         self._server: Optional[DLSlabServer] = None
         self._server_thread: Optional[threading.Thread] = None
@@ -95,6 +106,26 @@ class MainWindow(QMainWindow):
         quit_action.setShortcut("Ctrl+Q")
         quit_action.triggered.connect(self.close)
         file_menu.addAction(quit_action)
+
+        # ---- Toolbar ----
+        toolbar = QToolBar("Controls", self)
+        toolbar.setMovable(False)
+        toolbar.setStyleSheet(
+            "QToolBar { background: #2b2b2b; border-bottom: 1px solid #444; spacing: 6px; }"
+            "QToolButton { color: #ffffff; padding: 4px 10px; border-radius: 4px; }"
+            "QToolButton:hover { background: #444; }"
+        )
+        self.addToolBar(toolbar)
+
+        self._lock_action = QAction("🔒 Bloquear Pantallas", self)
+        self._lock_action.setToolTip("Oscurecer pantallas de los alumnos y bloquear input")
+        self._lock_action.triggered.connect(self._open_blank_screen_dialog)
+        toolbar.addAction(self._lock_action)
+
+        self._unlock_action = QAction("🔓 Desbloquear Pantallas", self)
+        self._unlock_action.setToolTip("Restaurar pantallas de todos los alumnos")
+        self._unlock_action.triggered.connect(self._unblank_all)
+        toolbar.addAction(self._unlock_action)
 
         # ---- Central widget ----
         central = QWidget()
@@ -226,6 +257,67 @@ class MainWindow(QMainWindow):
         return self._thumbnails[client_id]
 
     # ------------------------------------------------------------------
+    # Blank-screen control
+    # ------------------------------------------------------------------
+
+    @pyqtSlot()
+    def _open_blank_screen_dialog(self) -> None:
+        """Open the lock-screen configuration dialog."""
+        connected_ids = list(self._thumbnails.keys())
+        dialog = BlankScreenDialog(connected_ids, parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        message = dialog.get_message()
+        target_ids = dialog.get_selected_client_ids()
+
+        if not target_ids:
+            QMessageBox.warning(
+                self,
+                "Sin clientes",
+                "No hay alumnos conectados o ninguno fue seleccionado.",
+            )
+            return
+
+        self._send_blank_screen(target_ids, message)
+
+    def _send_blank_screen(self, client_ids: list[str], message: str) -> None:
+        """Dispatch BLANK_SCREEN to the given clients and update the UI.
+
+        Args:
+            client_ids: Client identifiers to lock.
+            message:    Text to display on the overlay.
+        """
+        if self._server and self._loop:
+            asyncio.run_coroutine_threadsafe(
+                self._server.blank_screen(client_ids, message),
+                self._loop,
+            )
+        for cid in client_ids:
+            self._blocked_clients.add(cid)
+            widget = self._thumbnails.get(cid)
+            if widget:
+                widget.set_blocked(True)
+        logger.info(
+            "Blank-screen sent to %d client(s): %r", len(client_ids), client_ids
+        )
+
+    @pyqtSlot()
+    def _unblank_all(self) -> None:
+        """Send UNBLANK_SCREEN to all clients and restore thumbnail indicators."""
+        if self._server and self._loop:
+            asyncio.run_coroutine_threadsafe(
+                self._server.unblank_screen(None),
+                self._loop,
+            )
+        for cid in list(self._blocked_clients):
+            widget = self._thumbnails.get(cid)
+            if widget:
+                widget.set_blocked(False)
+        self._blocked_clients.clear()
+        logger.info("Unblank-screen sent to all clients.")
+
+    # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
@@ -253,6 +345,121 @@ def main() -> None:
     window = MainWindow()
     window.show()
     sys.exit(app.exec())
+
+
+# ---------------------------------------------------------------------------
+# Blank-screen dialog
+# ---------------------------------------------------------------------------
+
+class BlankScreenDialog(QDialog):
+    """Modal dialog for configuring and applying a screen-lock command.
+
+    Lets the teacher enter a custom message and choose whether to lock all
+    connected students or a manually selected subset.
+
+    Args:
+        client_ids: List of client identifiers currently visible in the grid.
+        parent:     Optional parent widget.
+    """
+
+    _DEFAULT_MESSAGE: str = "Atención al frente"
+
+    def __init__(
+        self,
+        client_ids: list[str],
+        parent: Optional[QWidget] = None,
+    ) -> None:
+        super().__init__(parent)
+        self._client_ids = client_ids
+        self.setWindowTitle("🔒 Bloquear Pantallas")
+        self.setMinimumWidth(420)
+        self._setup_ui()
+
+    # ------------------------------------------------------------------
+    # UI setup
+    # ------------------------------------------------------------------
+
+    def _setup_ui(self) -> None:
+        """Build the dialog layout."""
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+        layout.setContentsMargins(16, 16, 16, 16)
+
+        # Message field
+        layout.addWidget(QLabel("Mensaje a mostrar en pantalla:"))
+        self._message_edit = QLineEdit(self._DEFAULT_MESSAGE)
+        self._message_edit.setPlaceholderText(self._DEFAULT_MESSAGE)
+        layout.addWidget(self._message_edit)
+
+        # Target selection
+        layout.addWidget(QLabel("Aplicar a:"))
+
+        self._radio_all = QRadioButton("Todos los alumnos")
+        self._radio_all.setChecked(True)
+        self._radio_all.toggled.connect(self._toggle_list)
+        layout.addWidget(self._radio_all)
+
+        self._radio_selected = QRadioButton("Alumnos seleccionados:")
+        layout.addWidget(self._radio_selected)
+
+        self._list_widget = QListWidget()
+        self._list_widget.setEnabled(False)
+        self._list_widget.setSelectionMode(
+            QListWidget.SelectionMode.MultiSelection
+        )
+        for cid in self._client_ids:
+            item = QListWidgetItem(cid)
+            self._list_widget.addItem(item)
+        layout.addWidget(self._list_widget)
+
+        # Buttons
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Aplicar bloqueo")
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    # ------------------------------------------------------------------
+    # Slots
+    # ------------------------------------------------------------------
+
+    @pyqtSlot(bool)
+    def _toggle_list(self, all_selected: bool) -> None:
+        """Enable or disable the client list based on the radio selection.
+
+        Args:
+            all_selected: ``True`` when "Todos los alumnos" is active.
+        """
+        self._list_widget.setEnabled(not all_selected)
+
+    # ------------------------------------------------------------------
+    # Public result accessors
+    # ------------------------------------------------------------------
+
+    def get_message(self) -> str:
+        """Return the message text entered by the teacher.
+
+        Returns:
+            The trimmed message string, or the default if empty.
+        """
+        text = self._message_edit.text().strip()
+        return text if text else self._DEFAULT_MESSAGE
+
+    def get_selected_client_ids(self) -> list[str]:
+        """Return the list of client IDs to lock.
+
+        If "Todos los alumnos" is selected, returns all client IDs.  Otherwise,
+        returns only the IDs highlighted in the list widget.
+
+        Returns:
+            List of client identifier strings.
+        """
+        if self._radio_all.isChecked():
+            return list(self._client_ids)
+        return [item.text() for item in self._list_widget.selectedItems()]
 
 
 if __name__ == "__main__":

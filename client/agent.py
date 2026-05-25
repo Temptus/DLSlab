@@ -35,6 +35,7 @@ import uuid
 import webbrowser
 from typing import Optional
 
+from client.blank_screen import BlankScreenOverlay
 from client.input_handler import InputHandler
 from client.screen_capture import ScreenCapture, CAPTURE_INTERVAL
 from server.protocol import read_message, write_message
@@ -99,6 +100,8 @@ class DLSlabAgent:
             self._input_handler = InputHandler()
         except RuntimeError as exc:
             logger.warning("Remote input disabled: %s", exc)
+
+        self._blank_screen = BlankScreenOverlay()
 
         self._writer: Optional[asyncio.StreamWriter] = None
         self._running: bool = False
@@ -238,6 +241,12 @@ class DLSlabAgent:
         elif message.type == MessageType.COMMAND:
             self._handle_command(message)
 
+        elif message.type == MessageType.BLANK_SCREEN:
+            self._handle_blank_screen(message)
+
+        elif message.type == MessageType.UNBLANK_SCREEN:
+            self._handle_unblank_screen(message)
+
         else:
             logger.debug("Ignored message type: %s", message.type)
 
@@ -284,6 +293,29 @@ class DLSlabAgent:
 
         else:
             logger.warning("Unknown command: %s", command)
+
+    def _handle_blank_screen(self, message: Message) -> None:
+        """Activate the blank-screen overlay on this machine.
+
+        Extracts the ``message`` key from the payload (defaulting to
+        ``"Atención al frente"``) and calls
+        :meth:`~client.blank_screen.BlankScreenOverlay.show`.
+
+        Args:
+            message: A BLANK_SCREEN message from the server.
+        """
+        text: str = message.payload.get("message", "Atención al frente")
+        logger.info("BLANK_SCREEN received — showing overlay (text=%r).", text)
+        self._blank_screen.show(text)
+
+    def _handle_unblank_screen(self, message: Message) -> None:
+        """Deactivate the blank-screen overlay on this machine.
+
+        Args:
+            message: An UNBLANK_SCREEN message from the server.
+        """
+        logger.info("UNBLANK_SCREEN received — hiding overlay.")
+        self._blank_screen.hide()
 
     # ------------------------------------------------------------------
     # Utilities
