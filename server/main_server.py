@@ -36,12 +36,19 @@ from server.client_manager import ClientManager
 from server.protocol import read_message, write_message
 from server.screen_streamer import TeacherScreenStreamer
 from server.student_streamer import StudentStreamer
+from server.wol_manager import WolManager
 from shared.messages import (
     Message,
     MessageType,
     make_blank_screen,
+    make_lock_workstation,
+    make_logout,
+    make_open_url,
     make_pong,
     make_request_hires_screenshot,
+    make_restart,
+    make_run_app,
+    make_shutdown,
     make_start_show_student,
     make_start_show_teacher,
     make_stop_hires_screenshot,
@@ -106,6 +113,7 @@ class DLSlabServer:
         self._on_screenshot = on_screenshot
         self._on_policy_violation = on_policy_violation
         self.clients = ClientManager()
+        self.wol_manager = WolManager(self.clients)
         self._server: asyncio.AbstractServer | None = None
         self._streamer = TeacherScreenStreamer(self)
         self._student_streamer = StudentStreamer(self)
@@ -398,6 +406,86 @@ class DLSlabServer:
         for cid in targets:
             await self.send_to_client(cid, msg)
 
+    async def shutdown(
+        self,
+        client_ids: list[str] | None,
+        delay: int = 5,
+    ) -> None:
+        """Send SHUTDOWN to target clients."""
+        safe_delay = self._sanitize_power_delay(delay)
+        msg = make_shutdown("server", safe_delay)
+        targets = self._resolve_targets(client_ids)
+        for cid in targets:
+            await self.send_to_client(cid, msg)
+        logger.warning("shutdown sent to %d client(s) delay=%d", len(targets), safe_delay)
+
+    async def restart(
+        self,
+        client_ids: list[str] | None,
+        delay: int = 5,
+    ) -> None:
+        """Send RESTART to target clients."""
+        safe_delay = self._sanitize_power_delay(delay)
+        msg = make_restart("server", safe_delay)
+        targets = self._resolve_targets(client_ids)
+        for cid in targets:
+            await self.send_to_client(cid, msg)
+        logger.warning("restart sent to %d client(s) delay=%d", len(targets), safe_delay)
+
+    async def logout(self, client_ids: list[str] | None) -> None:
+        """Send LOGOUT to target clients."""
+        msg = make_logout("server")
+        targets = self._resolve_targets(client_ids)
+        for cid in targets:
+            await self.send_to_client(cid, msg)
+
+    async def lock_workstation(self, client_ids: list[str] | None) -> None:
+        """Send LOCK_WORKSTATION to target clients."""
+        msg = make_lock_workstation("server")
+        targets = self._resolve_targets(client_ids)
+        for cid in targets:
+            await self.send_to_client(cid, msg)
+
+    async def open_url(self, client_ids: list[str] | None, url: str) -> None:
+        """Send OPEN_URL to target clients."""
+        msg = make_open_url("server", url)
+        targets = self._resolve_targets(client_ids)
+        for cid in targets:
+            await self.send_to_client(cid, msg)
+
+    async def run_app(
+        self,
+        client_ids: list[str] | None,
+        path: str,
+        args: list[str],
+    ) -> None:
+        """Send RUN_APP to target clients."""
+        msg = make_run_app("server", path, args=args)
+        targets = self._resolve_targets(client_ids)
+        for cid in targets:
+            await self.send_to_client(cid, msg)
+
+    async def wake_on_lan(self, client_ids: list[str] | None) -> dict[str, bool]:
+        """Wake clients via Wake-on-LAN."""
+        if client_ids is None:
+            return self.wol_manager.wake_all()
+        results: dict[str, bool] = {}
+        for client_id in client_ids:
+            results[client_id] = self.wol_manager.wake(client_id)
+        return results
+
+    def _resolve_targets(self, client_ids: list[str] | None) -> list[str]:
+        """Resolve target client IDs from optional explicit list."""
+        return list(self.clients.all_client_ids()) if client_ids is None else client_ids
+
+    @staticmethod
+    def _sanitize_power_delay(delay: int) -> int:
+        """Normalize shutdown/restart delay and enforce minimum confirmation window."""
+        try:
+            return max(3, int(delay))
+        except (TypeError, ValueError):
+            return 5
+
     # ------------------------------------------------------------------
     # Internal handlers
     # ------------------------------------------------------------------
@@ -478,6 +566,7 @@ class DLSlabServer:
             MessageType.SCREENSHOT: self._handle_screenshot,
             MessageType.PING: self._handle_ping,
             MessageType.POLICY_VIOLATION: self._handle_policy_violation,
+            MessageType.CLIENT_MAC: self._handle_client_mac,
         }
 
         handler = handlers.get(message.type)
@@ -494,13 +583,33 @@ class DLSlabServer:
     ) -> None:
         hostname = message.payload.get("hostname", message.client_id)
         ip = message.payload.get("ip", peer_ip)
-        self.clients.register(message.client_id, hostname, ip, writer)
+        mac = str(message.payload.get("mac", "")).strip()
+        self.clients.register(message.client_id, hostname, ip, mac, writer)
+        if mac:
+            self.wol_manager.register_mac(message.client_id, mac)
         logger.info(
-            "REGISTER  client_id=%s  hostname=%s  ip=%s",
+            "REGISTER  client_id=%s  hostname=%s  ip=%s  mac=%s",
             message.client_id,
             hostname,
             ip,
+            mac or "unknown",
         )
+
+    async def _handle_client_mac(
+        self,
+        message: Message,
+        writer: asyncio.StreamWriter,
+        peer_ip: str,
+    ) -> None:
+        """Handle standalone CLIENT_MAC updates from clients."""
+        del writer, peer_ip
+        mac = str(message.payload.get("mac", "")).strip()
+        if not mac:
+            return
+        client = self.clients.get(message.client_id)
+        if client:
+            client.mac = mac
+        self.wol_manager.register_mac(message.client_id, mac)
 
     async def _handle_screenshot(
         self,

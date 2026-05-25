@@ -31,7 +31,6 @@ from PyQt6.QtCore import QTimer, Qt, pyqtSlot
 from PyQt6.QtGui import QAction, QFont
 from PyQt6.QtWidgets import (
     QApplication,
-    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -54,6 +53,7 @@ from PyQt6.QtWidgets import (
 
 from server.main_server import DLSlabServer
 from ui.policy_dialog import PolicyDialog
+from ui.power_dialog import PowerDialog
 from ui.thumbnail_widget import ThumbnailWidget
 
 logger = logging.getLogger(__name__)
@@ -88,6 +88,7 @@ class MainWindow(QMainWindow):
         self._app_policy_state: dict[str, str | None] = {}
         self._web_policy_state: dict[str, str | None] = {}
         self._pending_policy_violations: list[tuple[str, str, str]] = []
+        self._known_macs: dict[str, str] = {}
 
         self._server: Optional[DLSlabServer] = None
         self._server_thread: Optional[threading.Thread] = None
@@ -182,6 +183,16 @@ class MainWindow(QMainWindow):
         self._policy_action.setToolTip("Configurar políticas de aplicaciones y web")
         self._policy_action.triggered.connect(self._open_policy_dialog)
         toolbar.addAction(self._policy_action)
+
+        self._power_action = QAction("⚡ Energía", self)
+        self._power_action.setToolTip("Abrir control de energía y Wake-on-LAN")
+        self._power_action.triggered.connect(self._open_power_dialog)
+        toolbar.addAction(self._power_action)
+
+        self._emergency_shutdown_action = QAction("🔴 Apagar Todo", self)
+        self._emergency_shutdown_action.setToolTip("Apagar todos los equipos (con confirmación)")
+        self._emergency_shutdown_action.triggered.connect(self._emergency_shutdown_all)
+        toolbar.addAction(self._emergency_shutdown_action)
 
         # ---- Central widget ----
         central = QWidget()
@@ -280,10 +291,30 @@ class MainWindow(QMainWindow):
             widget = self._get_or_create_thumbnail(client_id)
             widget.update_screenshot(image_b64)
             widget.set_connected(True)
+            widget.set_power_state("online")
             widget.set_policy_active(
                 self._app_policy_state.get(client_id),
                 self._web_policy_state.get(client_id),
             )
+            if self._server:
+                info = self._server.clients.get(client_id)
+                if info and info.mac:
+                    self._known_macs[client_id] = info.mac
+
+        if self._server:
+            connected_ids = {info.client_id for info in self._server.clients.all_clients()}
+            for client_id, widget in self._thumbnails.items():
+                if client_id not in connected_ids:
+                    widget.set_connected(False)
+                    widget.set_power_state("offline")
+                elif client_id not in pending:
+                    widget.set_connected(True)
+            self._known_macs.update(self._server.wol_manager.get_known_macs())
+            for client_id in sorted(self._known_macs):
+                if client_id not in self._thumbnails:
+                    widget = self._get_or_create_thumbnail(client_id)
+                    widget.set_connected(False)
+                    widget.set_power_state("offline")
 
         # Update status bar with connected count.
         if self._server:
@@ -312,6 +343,7 @@ class MainWindow(QMainWindow):
 
             widget = ThumbnailWidget(client_id=client_id, hostname=hostname)
             widget.present_requested.connect(self._on_present_requested)
+            widget.wol_requested.connect(self._wake_single_client)
             self._thumbnails[client_id] = widget
             widget.set_policy_active(
                 self._app_policy_state.get(client_id),
@@ -578,6 +610,132 @@ class MainWindow(QMainWindow):
                 "Violación de política",
                 f"⚠️ {hostname} intentó abrir {process_name}\nModo: {mode}",
             )
+
+    # ------------------------------------------------------------------
+    # Power control
+    # ------------------------------------------------------------------
+
+    @pyqtSlot()
+    def _open_power_dialog(self) -> None:
+        """Open the energy control dialog."""
+        client_ids = list(self._thumbnails.keys())
+        disconnected = self._get_disconnected_with_mac()
+        dialog = PowerDialog(
+            client_ids=client_ids,
+            disconnected_clients=disconnected,
+            on_shutdown=self._send_shutdown,
+            on_restart=self._send_restart,
+            on_lock=self._send_lock_workstation,
+            on_logout=self._send_logout,
+            on_open_url=self._send_open_url,
+            on_run_app=self._send_run_app,
+            on_wol_selected=self._send_wol_selected,
+            on_wol_all=self._send_wol_all,
+            on_wol_manual=self._send_wol_manual,
+            parent=self,
+        )
+        dialog.exec()
+
+    @pyqtSlot()
+    def _emergency_shutdown_all(self) -> None:
+        """Toolbar quick action for global emergency shutdown."""
+        confirm = QMessageBox.question(
+            self,
+            "Confirmar apagado total",
+            "¿Seguro que deseas apagar TODO el laboratorio?",
+        )
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+        targets = list(self._thumbnails.keys())
+        self._send_shutdown(targets, 5)
+
+    def _send_shutdown(self, client_ids: list[str], delay: int) -> None:
+        if self._server and self._loop:
+            asyncio.run_coroutine_threadsafe(
+                self._server.shutdown(client_ids, delay=delay),
+                self._loop,
+            )
+        for client_id in client_ids:
+            widget = self._thumbnails.get(client_id)
+            if widget:
+                widget.set_power_state("shutting_down")
+
+    def _send_restart(self, client_ids: list[str], delay: int) -> None:
+        if self._server and self._loop:
+            asyncio.run_coroutine_threadsafe(
+                self._server.restart(client_ids, delay=delay),
+                self._loop,
+            )
+        for client_id in client_ids:
+            widget = self._thumbnails.get(client_id)
+            if widget:
+                widget.set_power_state("restarting")
+
+    def _send_logout(self, client_ids: list[str]) -> None:
+        if self._server and self._loop:
+            asyncio.run_coroutine_threadsafe(
+                self._server.logout(client_ids),
+                self._loop,
+            )
+
+    def _send_lock_workstation(self, client_ids: list[str]) -> None:
+        if self._server and self._loop:
+            asyncio.run_coroutine_threadsafe(
+                self._server.lock_workstation(client_ids),
+                self._loop,
+            )
+
+    def _send_open_url(self, client_ids: list[str], url: str) -> None:
+        if self._server and self._loop:
+            asyncio.run_coroutine_threadsafe(
+                self._server.open_url(client_ids, url),
+                self._loop,
+            )
+
+    def _send_run_app(self, client_ids: list[str], path: str, args: list[str]) -> None:
+        if self._server and self._loop:
+            asyncio.run_coroutine_threadsafe(
+                self._server.run_app(client_ids, path, args),
+                self._loop,
+            )
+
+    def _send_wol_selected(self, client_ids: list[str]) -> None:
+        if self._server and self._loop:
+            asyncio.run_coroutine_threadsafe(
+                self._server.wake_on_lan(client_ids),
+                self._loop,
+            )
+
+    def _send_wol_all(self) -> None:
+        if self._server and self._loop:
+            asyncio.run_coroutine_threadsafe(
+                self._server.wake_on_lan(None),
+                self._loop,
+            )
+
+    def _send_wol_manual(self, mac: str) -> None:
+        if self._server:
+            try:
+                self._server.wol_manager.wake_by_mac(mac)
+            except (ValueError, OSError) as exc:
+                QMessageBox.warning(self, "WoL", f"No se pudo enviar WoL: {exc}")
+
+    @pyqtSlot(str)
+    def _wake_single_client(self, client_id: str) -> None:
+        """Wake one client from its thumbnail button."""
+        self._send_wol_selected([client_id])
+
+    def _get_disconnected_with_mac(self) -> dict[str, str]:
+        """Return disconnected clients that have known MAC addresses."""
+        if not self._server:
+            return {}
+        connected_ids = {info.client_id for info in self._server.clients.all_clients()}
+        known = self._server.wol_manager.get_known_macs()
+        return {
+            client_id: mac
+            for client_id, mac in known.items()
+            if client_id not in connected_ids and mac
+        }
 
     # ------------------------------------------------------------------
     # Show-student control

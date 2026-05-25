@@ -27,6 +27,7 @@ class ClientInfo:
         client_id:  Unique identifier sent by the client during REGISTER.
         hostname:   Human-readable machine name of the student PC.
         ip:         IP address of the client as reported by the OS.
+        mac:        Client MAC address used for Wake-on-LAN.
         last_seen:  UTC timestamp of the last successfully received message.
         writer:     asyncio StreamWriter used to push messages to this client.
     """
@@ -34,6 +35,7 @@ class ClientInfo:
     client_id: str
     hostname: str
     ip: str
+    mac: str
     last_seen: datetime
     writer: asyncio.StreamWriter
 
@@ -66,6 +68,7 @@ class ClientManager:
         client_id: str,
         hostname: str,
         ip: str,
+        mac: str,
         writer: asyncio.StreamWriter,
     ) -> ClientInfo:
         """Register a new client or update an existing registration.
@@ -77,6 +80,7 @@ class ClientManager:
             client_id: Unique string identifier for the client.
             hostname:  Human-readable machine name.
             ip:        Client IP address.
+            mac:       Client MAC address (empty if unknown).
             writer:    asyncio StreamWriter for the open TCP connection.
 
         Returns:
@@ -86,11 +90,18 @@ class ClientManager:
             client_id=client_id,
             hostname=hostname,
             ip=ip,
+            mac=mac,
             last_seen=datetime.now(tz=timezone.utc),
             writer=writer,
         )
         self._clients[client_id] = info
-        logger.info("Client registered: %s (%s @ %s)", client_id, hostname, ip)
+        logger.info(
+            "Client registered: %s (%s @ %s, mac=%s)",
+            client_id,
+            hostname,
+            ip,
+            mac or "unknown",
+        )
         return info
 
     def remove(self, client_id: str) -> None:

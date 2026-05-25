@@ -49,6 +49,13 @@ class MessageType(str, Enum):
     SET_WEB_POLICY = "SET_WEB_POLICY"
     CLEAR_WEB_POLICY = "CLEAR_WEB_POLICY"
     POLICY_VIOLATION = "POLICY_VIOLATION"
+    SHUTDOWN = "SHUTDOWN"
+    RESTART = "RESTART"
+    LOGOUT = "LOGOUT"
+    LOCK_WORKSTATION = "LOCK_WORKSTATION"
+    OPEN_URL = "OPEN_URL"
+    RUN_APP = "RUN_APP"
+    CLIENT_MAC = "CLIENT_MAC"
 
 
 # ---------------------------------------------------------------------------
@@ -110,7 +117,12 @@ class Message:
 # Convenience constructors
 # ---------------------------------------------------------------------------
 
-def make_register(client_id: str, hostname: str, ip: str) -> Message:
+def make_register(
+    client_id: str,
+    hostname: str,
+    ip: str,
+    mac: str = "",
+) -> Message:
     """Build a REGISTER message.
 
     Args:
@@ -124,7 +136,7 @@ def make_register(client_id: str, hostname: str, ip: str) -> Message:
     return Message(
         type=MessageType.REGISTER,
         client_id=client_id,
-        payload={"hostname": hostname, "ip": ip},
+        payload={"hostname": hostname, "ip": ip, "mac": mac},
     )
 
 
@@ -441,4 +453,58 @@ def make_policy_violation(client_id: str, process_name: str, mode: str) -> Messa
         type=MessageType.POLICY_VIOLATION,
         client_id=client_id,
         payload={"process_name": process_name, "mode": mode},
+    )
+
+
+def make_shutdown(server_id: str, delay: int) -> Message:
+    """Build a SHUTDOWN message."""
+    return Message(
+        type=MessageType.SHUTDOWN,
+        client_id=server_id,
+        payload={"delay": delay},
+    )
+
+
+def make_restart(server_id: str, delay: int) -> Message:
+    """Build a RESTART message."""
+    return Message(
+        type=MessageType.RESTART,
+        client_id=server_id,
+        payload={"delay": delay},
+    )
+
+
+def make_logout(server_id: str) -> Message:
+    """Build a LOGOUT message."""
+    return Message(
+        type=MessageType.LOGOUT,
+        client_id=server_id,
+        payload={},
+    )
+
+
+def make_lock_workstation(server_id: str) -> Message:
+    """Build a LOCK_WORKSTATION message."""
+    return Message(
+        type=MessageType.LOCK_WORKSTATION,
+        client_id=server_id,
+        payload={},
+    )
+
+
+def make_open_url(server_id: str, url: str) -> Message:
+    """Build an OPEN_URL message."""
+    return Message(
+        type=MessageType.OPEN_URL,
+        client_id=server_id,
+        payload={"url": url},
+    )
+
+
+def make_run_app(server_id: str, path: str, args: list[str] | None = None) -> Message:
+    """Build a RUN_APP message."""
+    return Message(
+        type=MessageType.RUN_APP,
+        client_id=server_id,
+        payload={"path": path, "args": args or []},
     )
