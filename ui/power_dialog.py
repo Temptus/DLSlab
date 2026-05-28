@@ -78,6 +78,10 @@ class PowerDialog(QDialog):
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
+        self.setStyleSheet(
+            "QRadioButton::indicator:unchecked { border: 1px solid #555; border-radius: 8px; background: #dadada; }"
+            "QRadioButton::indicator:checked { border: 3px solid #555; border-radius: 8px; background: #7bf279; }"
+        )
 
         layout.addWidget(self._build_power_section())
         layout.addWidget(self._build_remote_exec_section())
@@ -91,24 +95,39 @@ class PowerDialog(QDialog):
         self._shutdown_btn = QPushButton("🔴 Apagar Todo")
         self._shutdown_btn.setStyleSheet(
             "QPushButton { background: #c62828; color: white; font-weight: bold; padding: 8px; }"
+            "QPushButton:pressed { background: #b71c1c; padding-left: 10px; padding-top: 10px; }"
         )
+        self._shutdown_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._shutdown_btn.clicked.connect(self._on_shutdown_clicked)
         row.addWidget(self._shutdown_btn)
 
         self._restart_btn = QPushButton("🔄 Reiniciar Todo")
         self._restart_btn.setStyleSheet(
             "QPushButton { background: #ef6c00; color: white; font-weight: bold; padding: 8px; }"
+            "QPushButton:pressed { background: #E65100; padding-left: 10px; padding-top: 10px; }"
         )
+        self._restart_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._restart_btn.clicked.connect(self._on_restart_clicked)
         row.addWidget(self._restart_btn)
         layout.addLayout(row)
 
         row2 = QHBoxLayout()
         self._lock_btn = QPushButton("🔒 Bloquear Estaciones")
+        self._lock_btn.setStyleSheet(
+            "QPushButton { background: #424242; color: white; font-weight: bold; padding: 8px; }"
+            "QPushButton:pressed { background: #1C1C1C; padding-left: 10px; padding-top: 10px; }"
+        )
+        self._lock_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._lock_btn.clicked.connect(self._on_lock_clicked)
         row2.addWidget(self._lock_btn)
         self._logout_btn = QPushButton("🚪 Cerrar Sesión")
+        self._logout_btn.setStyleSheet(
+            "QPushButton { background: #1976D2; color: white; font-weight: bold; padding: 8px; }"
+            "QPushButton:pressed { background: #1565C0; padding-left: 10px; padding-top: 10px; }"
+        )
+        self._logout_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._logout_btn.clicked.connect(self._on_logout_clicked)
+
         row2.addWidget(self._logout_btn)
         layout.addLayout(row2)
 

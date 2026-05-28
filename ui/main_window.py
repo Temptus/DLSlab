@@ -106,50 +106,77 @@ class MainWindow(QMainWindow):
         """Build the main window UI."""
         self.setWindowTitle(WINDOW_TITLE)
         self.resize(WINDOW_WIDTH, WINDOW_HEIGHT)
-        self.setStyleSheet("background-color: #1e1e1e;")
+        self.setStyleSheet("background-color: #dadada;")
 
         # ---- Menu bar ----
         menu_bar = self.menuBar()
-        file_menu = menu_bar.addMenu("File")
-        quit_action = QAction("Quit", self)
+        file_menu = menu_bar.addMenu("Archivo")
+        quit_action = QAction("Salir", self)
         quit_action.setShortcut("Ctrl+Q")
         quit_action.triggered.connect(self.close)
         file_menu.addAction(quit_action)
+        help_menu = menu_bar.addMenu("Ayuda")
+        help_action = QAction("Ayuda", self)
+        help_action.setShortcut("Ctrl+H")
+        help_menu.addAction(help_action)
+        help_menu.addSeparator()
+        about_action = QAction("Acerca de...", self)
+        about_action.triggered.connect(self.show_about_dialog)
+        help_menu.addAction(about_action)
+        menu_bar.setStyleSheet(
+            "QMenuBar::item:hover { background: #e1e1e1; }"
+            "QMenu { background: #f0f0f0; } QMenu::item {padding: 8px 8px;}"
+            "QMenu::item:selected { background: #0078d7; color: #fff; border-radius: 5px; padding: 8px 8px; }"
+        )
+
+
 
         # ---- Toolbar ----
         toolbar = QToolBar("Controls", self)
         toolbar.setMovable(False)
         toolbar.setStyleSheet(
-            "QToolBar { background: #2b2b2b; border-bottom: 1px solid #444; spacing: 6px; }"
-            "QToolButton { color: #ffffff; padding: 4px 10px; border-radius: 4px; }"
-            "QToolButton:hover { background: #444; }"
+            "QToolBar { background: #f0f0f0; border-bottom: 1px solid #b9b9b9; border-top: 1px solid #fff; spacing: 6px; }"
+            "QToolButton { background: #f0f0f0;  color: #000; padding: 5px 5px; border-radius: 4px; font: 18pt; }"
+            "QToolButton:hover { background: #dadada; }"
         )
         self.addToolBar(toolbar)
 
-        self._lock_action = QAction("🔒 Bloquear Pantallas", self)
-        self._lock_action.setToolTip("Oscurecer pantallas de los alumnos y bloquear input")
+        self._lock_action = QAction("🔒", self)
+        self._lock_action.setToolTip("Bloquear Pantalla")
+        # self._lock_action.setDisabled(True)  # Disabled until at least one client connects
         self._lock_action.triggered.connect(self._open_blank_screen_dialog)
         toolbar.addAction(self._lock_action)
+        action_widget = toolbar.widgetForAction(self._lock_action)
+        if action_widget is not None:
+            action_widget.setCursor(Qt.CursorShape.PointingHandCursor)
 
-        self._unlock_action = QAction("🔓 Desbloquear Pantallas", self)
-        self._unlock_action.setToolTip("Restaurar pantallas de todos los alumnos")
+
+        self._unlock_action = QAction("🔓", self)
+        self._unlock_action.setToolTip("Desbloquear Pantallas")
         self._unlock_action.triggered.connect(self._unblank_all)
         toolbar.addAction(self._unlock_action)
+        action_widget = toolbar.widgetForAction(self._unlock_action)
+        if action_widget is not None:
+            action_widget.setCursor(Qt.CursorShape.PointingHandCursor)
 
         toolbar.addSeparator()
 
-        self._stream_action = QAction("📡 Transmitir Mi Pantalla", self)
-        self._stream_action.setToolTip(
-            "Proyectar la pantalla del profesor en los monitores de los alumnos"
-        )
+        self._stream_action = QAction("📡", self)
+        self._stream_action.setToolTip("Transmitir Mi Pantalla")
         self._stream_action.triggered.connect(self._open_show_teacher_dialog)
         toolbar.addAction(self._stream_action)
+        action_widget = toolbar.widgetForAction(self._stream_action)
+        if action_widget is not None:
+            action_widget.setCursor(Qt.CursorShape.PointingHandCursor)
 
-        self._stop_stream_action = QAction("⏹ Detener Transmisión", self)
+        self._stop_stream_action = QAction("⏹️", self)
         self._stop_stream_action.setToolTip("Detener la transmisión de pantalla activa")
         self._stop_stream_action.setEnabled(False)
         self._stop_stream_action.triggered.connect(self._stop_show_teacher)
         toolbar.addAction(self._stop_stream_action)
+        action_widget = toolbar.widgetForAction(self._stop_stream_action)
+        if action_widget is not None:
+            action_widget.setCursor(Qt.CursorShape.PointingHandCursor)
 
         # Live indicator label (hidden until streaming starts)
         self._live_label = QLabel("  🔴 EN VIVO")
@@ -161,13 +188,16 @@ class MainWindow(QMainWindow):
 
         toolbar.addSeparator()
 
-        self._stop_student_action = QAction("⏹ Detener Presentación", self)
+        self._stop_student_action = QAction("⏹️", self)
         self._stop_student_action.setToolTip(
             "Detener la presentación de alumno activa"
         )
         self._stop_student_action.setEnabled(False)
         self._stop_student_action.triggered.connect(self._stop_show_student)
         toolbar.addAction(self._stop_student_action)
+        action_widget = toolbar.widgetForAction(self._stop_student_action)
+        if action_widget is not None:
+            action_widget.setCursor(Qt.CursorShape.PointingHandCursor)
 
         # Presentation indicator label (hidden until a student is presenting)
         self._student_presentation_label = QLabel()
@@ -179,20 +209,29 @@ class MainWindow(QMainWindow):
 
         toolbar.addSeparator()
 
-        self._policy_action = QAction("🚦 Políticas", self)
+        self._policy_action = QAction("🚦", self)
         self._policy_action.setToolTip("Configurar políticas de aplicaciones y web")
         self._policy_action.triggered.connect(self._open_policy_dialog)
         toolbar.addAction(self._policy_action)
+        action_widget = toolbar.widgetForAction(self._policy_action)
+        if action_widget is not None:
+            action_widget.setCursor(Qt.CursorShape.PointingHandCursor)
 
-        self._power_action = QAction("⚡ Energía", self)
+        self._power_action = QAction("⚡", self)
         self._power_action.setToolTip("Abrir control de energía y Wake-on-LAN")
         self._power_action.triggered.connect(self._open_power_dialog)
         toolbar.addAction(self._power_action)
+        action_widget = toolbar.widgetForAction(self._power_action)
+        if action_widget is not None:
+            action_widget.setCursor(Qt.CursorShape.PointingHandCursor)
 
-        self._emergency_shutdown_action = QAction("🔴 Apagar Todo", self)
-        self._emergency_shutdown_action.setToolTip("Apagar todos los equipos (con confirmación)")
+        self._emergency_shutdown_action = QAction("🔴", self)
+        self._emergency_shutdown_action.setToolTip("Apagar todos los equipos")
         self._emergency_shutdown_action.triggered.connect(self._emergency_shutdown_all)
         toolbar.addAction(self._emergency_shutdown_action)
+        action_widget = toolbar.widgetForAction(self._emergency_shutdown_action)
+        if action_widget is not None:
+            action_widget.setCursor(Qt.CursorShape.PointingHandCursor)
 
         # ---- Central widget ----
         central = QWidget()
@@ -202,12 +241,12 @@ class MainWindow(QMainWindow):
         main_layout.setSpacing(8)
 
         # Title
-        title = QLabel("Student Monitor")
+        title = QLabel("Monitor Estudiantes")
         font = QFont()
         font.setPointSize(14)
         font.setBold(True)
         title.setFont(font)
-        title.setStyleSheet("color: #ffffff;")
+        title.setStyleSheet("color: #000;")
         main_layout.addWidget(title)
 
         # Scroll area containing the thumbnail grid
@@ -228,6 +267,7 @@ class MainWindow(QMainWindow):
         self._status_bar = QStatusBar()
         self.setStatusBar(self._status_bar)
         self._status_bar.showMessage("Server starting…")
+        self._status_bar.setStyleSheet("border-top: 1px solid #b9b9b9;")
 
     # ------------------------------------------------------------------
     # Server integration
@@ -320,7 +360,7 @@ class MainWindow(QMainWindow):
         if self._server:
             count = len(self._server.clients)
             self._status_bar.showMessage(
-                f"Server running — {count} student(s) connected"
+                f"Servidor activo — {count} Estudiante(s) conectado(s)"
             )
         self._process_policy_violations()
 
@@ -839,6 +879,16 @@ class MainWindow(QMainWindow):
             asyncio.run_coroutine_threadsafe(self._server.stop(), self._loop)
         super().closeEvent(event)
 
+    # ------------------------------------------------------------------
+    # About Dialog
+    # ------------------------------------------------------------------
+
+    def show_about_dialog(self):
+        QMessageBox.information(
+            self,
+            "Acerca de",
+            "DLSlab Teacher Console\nVersión 1.0\n© 2026 by Temptus\nhttps://github.com/Temptus/\n\nAplicación para monitoreo y control de estudiantes.\n"
+        )
 
 # ---------------------------------------------------------------------------
 # Entry point
@@ -1001,6 +1051,10 @@ class ShowTeacherDialog(QDialog):
         self.setWindowTitle("📡 Transmitir Mi Pantalla")
         self.setMinimumWidth(440)
         self._setup_ui()
+        self.setStyleSheet(
+            "QRadioButton::indicator:unchecked { border: 1px solid #555; border-radius: 8px; background: #dadada; }"
+            "QRadioButton::indicator:checked { border: 3px solid #555; border-radius: 8px; background: #7bf279; }"
+        )
 
     # ------------------------------------------------------------------
     # UI setup

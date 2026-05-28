@@ -29,6 +29,7 @@ COMMON_APP_SHORTCUTS: dict[str, str] = {
     "Firefox": "firefox.exe",
     "Word": "winword.exe",
     "Excel": "excel.exe",
+    "PowerPoint": "powerpnt.exe",
     "Notepad": "notepad.exe",
 }
 COMMON_URL_SHORTCUTS: dict[str, str] = {
@@ -56,6 +57,10 @@ class PolicyDialog(QDialog):
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
+        self.setStyleSheet(
+            "QRadioButton::indicator:unchecked { border: 1px solid #555; border-radius: 8px; background: #dadada; }"
+            "QRadioButton::indicator:checked { border: 3px solid #555; border-radius: 8px; background: #7bf279; }"
+        )
 
         tabs = QTabWidget()
         tabs.addTab(self._build_app_tab(), "🖥️ Aplicaciones")
@@ -106,7 +111,7 @@ class PolicyDialog(QDialog):
 
         layout.addWidget(QLabel("Aplicar a:"))
         self._app_all_radio = QRadioButton("Todos")
-        self._app_all_radio.setChecked(True)
+        self._app_all_radio.setChecked(False)
         self._app_selected_radio = QRadioButton("Selección múltiple")
         self._app_all_radio.toggled.connect(self._toggle_app_client_list)
         layout.addWidget(self._app_all_radio)
