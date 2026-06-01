@@ -1,5 +1,5 @@
 """
-client/agent.py
+client/agent.py Yan
 ===============
 DLSlab student agent — runs on each Windows PC in the lab.
 
@@ -33,6 +33,8 @@ import sys
 import uuid
 from typing import Optional
 
+from PyQt6.QtCore import QObject, pyqtSignal
+
 from client.app_enforcer import AppEnforcer
 from client.blank_screen import BlankScreenOverlay
 from client.input_handler import InputHandler
@@ -51,6 +53,22 @@ from shared.messages import (
     make_register,
     make_screenshot,
 )
+
+# ---------------------------------------------------------------------------
+# Qt signal bridge (cross-thread UI calls)
+# ---------------------------------------------------------------------------
+
+class _AgentSignals(QObject):
+    """Señales para actualizar la UI de Qt de forma segura desde el hilo asyncio."""
+    show_teacher   = pyqtSignal()
+    hide_teacher   = pyqtSignal()
+    update_teacher = pyqtSignal(str)
+    show_student   = pyqtSignal(str)   # presenter_name
+    hide_student   = pyqtSignal()
+    update_student = pyqtSignal(str)
+    show_blank     = pyqtSignal(str)   # texto del overlay
+    hide_blank     = pyqtSignal()
+
 
 # ---------------------------------------------------------------------------
 # Configuration constants
@@ -124,6 +142,18 @@ class DLSlabAgent:
             on_violation=self._on_policy_violation,
         )
 
+        # Puente de señales Qt — permite llamar a la UI desde el hilo asyncio
+        # de forma thread-safe (Qt encola automáticamente al hilo principal).
+        self._signals = _AgentSignals()
+        self._signals.show_teacher.connect(self._teacher_display.show)
+        self._signals.hide_teacher.connect(self._teacher_display.hide)
+        self._signals.update_teacher.connect(self._teacher_display.update_frame)
+        self._signals.show_student.connect(self._student_display.show)
+        self._signals.hide_student.connect(self._student_display.hide)
+        self._signals.update_student.connect(self._student_display.update_frame)
+        self._signals.show_blank.connect(self._blank_screen.show)
+        self._signals.hide_blank.connect(self._blank_screen.hide)
+
         self._writer: Optional[asyncio.StreamWriter] = None
         self._running: bool = False
         self._hires_task: Optional[asyncio.Task] = None
@@ -181,7 +211,8 @@ class DLSlabAgent:
             self.client_id,
         )
         reader, writer = await asyncio.open_connection(
-            self.server_host, self.server_port
+            self.server_host, self.server_port,
+            limit=10 * 1024 * 1024 # 10 MB — igual a MAX_MESSAGE_BYTES
         )
         self._writer = writer
         logger.info("Connected.")
@@ -385,55 +416,26 @@ class DLSlabAgent:
             logger.warning("Unknown command: %s", command)
 
     def _handle_blank_screen(self, message: Message) -> None:
-        """Activate the blank-screen overlay on this machine.
-
-        Extracts the ``message`` key from the payload (defaulting to
-        ``"Atención al frente"``) and calls
-        :meth:`~client.blank_screen.BlankScreenOverlay.show`.
-
-        Args:
-            message: A BLANK_SCREEN message from the server.
-        """
         text: str = message.payload.get("message", "Atención al frente")
         logger.info("BLANK_SCREEN received — showing overlay (text=%r).", text)
-        self._blank_screen.show(text)
+        self._signals.show_blank.emit(text)
 
     def _handle_unblank_screen(self, message: Message) -> None:
-        """Deactivate the blank-screen overlay on this machine.
-
-        Args:
-            message: An UNBLANK_SCREEN message from the server.
-        """
         logger.info("UNBLANK_SCREEN received — hiding overlay.")
-        self._blank_screen.hide()
+        self._signals.hide_blank.emit()
 
     def _handle_start_show_teacher(self, message: Message) -> None:
-        """Open the teacher-display fullscreen window.
-
-        Args:
-            message: A START_SHOW_TEACHER message from the server.
-        """
         logger.info("START_SHOW_TEACHER received — showing teacher display.")
-        self._teacher_display.show()
+        self._signals.show_teacher.emit()
 
     def _handle_teacher_frame(self, message: Message) -> None:
-        """Render an incoming teacher screen frame.
-
-        Args:
-            message: A TEACHER_FRAME message carrying a base64-encoded JPEG.
-        """
         frame_b64: str = message.payload.get("frame", "")
         if frame_b64:
-            self._teacher_display.update_frame(frame_b64)
+            self._signals.update_teacher.emit(frame_b64)
 
     def _handle_stop_show_teacher(self, message: Message) -> None:
-        """Close the teacher-display window.
-
-        Args:
-            message: A STOP_SHOW_TEACHER message from the server.
-        """
         logger.info("STOP_SHOW_TEACHER received — hiding teacher display.")
-        self._teacher_display.hide()
+        self._signals.hide_teacher.emit()
 
     async def _handle_request_hires_screenshot(
         self, writer: asyncio.StreamWriter
@@ -462,37 +464,21 @@ class DLSlabAgent:
         logger.info("STOP_HIRES_SCREENSHOT received — hires capture stopped.")
 
     def _handle_start_show_student(self, message: Message) -> None:
-        """Open the student-display fullscreen window.
-
-        Args:
-            message: A START_SHOW_STUDENT message with ``presenter_name`` and
-                     ``presenter_id`` in the payload.
-        """
         presenter_name: str = message.payload.get("presenter_name", "Alumno")
         logger.info(
             "START_SHOW_STUDENT received — showing student display for %r.",
             presenter_name,
         )
-        self._student_display.show(presenter_name)
+        self._signals.show_student.emit(presenter_name)
 
     def _handle_student_frame(self, message: Message) -> None:
-        """Render an incoming student screen frame.
-
-        Args:
-            message: A STUDENT_FRAME message carrying a base64-encoded JPEG.
-        """
         frame_b64: str = message.payload.get("frame", "")
         if frame_b64:
-            self._student_display.update_frame(frame_b64)
+            self._signals.update_student.emit(frame_b64)
 
     def _handle_stop_show_student(self, message: Message) -> None:
-        """Close the student-display window.
-
-        Args:
-            message: A STOP_SHOW_STUDENT message from the server.
-        """
         logger.info("STOP_SHOW_STUDENT received — hiding student display.")
-        self._student_display.hide()
+        self._signals.hide_student.emit()
 
     def _handle_set_app_policy(self, message: Message) -> None:
         """Apply app whitelist/blacklist policy sent by the server."""
@@ -704,5 +690,34 @@ async def _main() -> None:
         await agent.stop()
 
 
+def main() -> None:
+    """Entry point: Qt en hilo principal, asyncio en hilo secundario."""
+    import threading
+    from PyQt6.QtWidgets import QApplication
+
+    # QApplication y DLSlabAgent DEBEN crearse en el hilo principal de Qt
+    # para que los QObject y sus señales pertenezcan al hilo correcto.
+    # Así Qt usará QueuedConnection automáticamente al emitir desde asyncio.
+    app = QApplication(sys.argv)
+    args = _parse_args()
+    agent = DLSlabAgent(
+        server_host=args.server_ip,
+        server_port=args.server_port,
+        client_id=args.client_id,
+    )
+
+    # asyncio corre en un hilo secundario, usando el agente ya creado
+    def _run_asyncio() -> None:
+        asyncio.run(agent.run())
+
+    asyncio_thread = threading.Thread(
+        target=_run_asyncio, daemon=True, name="dlslab-asyncio"
+    )
+    asyncio_thread.start()
+
+    # El hilo principal queda bloqueado en el event loop de Qt
+    app.exec()
+
+
 if __name__ == "__main__":
-    asyncio.run(_main())
+    main()

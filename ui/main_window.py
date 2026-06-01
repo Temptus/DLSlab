@@ -935,6 +935,10 @@ class BlankScreenDialog(QDialog):
         self.setWindowTitle("🔒 Bloquear Pantallas")
         self.setMinimumWidth(420)
         self._setup_ui()
+        self.setStyleSheet(
+            "QRadioButton::indicator:unchecked { border: 1px solid #555; border-radius: 8px; background: #dadada; }"
+            "QRadioButton::indicator:checked { border: 3px solid #555; border-radius: 8px; background: #7bf279; }"
+        )
 
     # ------------------------------------------------------------------
     # UI setup

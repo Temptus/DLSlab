@@ -1,297 +1,197 @@
 """
-client/blank_screen.py
-======================
-Fullscreen black overlay that blacks out all monitors on the student PC,
-blocks all keyboard and mouse input at the system level (using pynput with
-``suppress=True``), and displays a customisable message.
-
-The overlay is implemented with PyQt6 — one borderless, always-on-top
-:class:`QWidget` per connected monitor — and runs in the Qt main thread
-(via :func:`QMetaObject.invokeMethod`) to keep it safe for asyncio agents.
-
-Input blocking uses :mod:`pynput` listeners in background threads.
-
-Typical usage inside the agent
--------------------------------
-::
-
-    overlay = BlankScreenOverlay()
-    overlay.show("Atención al frente")   # blocks input, shows message
-    ...
-    overlay.hide()                        # restores input, removes windows
+client/blank_screen.py new
 """
 
 from __future__ import annotations
 
 import logging
 import threading
+import ctypes
+import ctypes.wintypes
 from typing import Optional
-
-from PyQt6.QtCore import Qt, QMetaObject, Q_ARG, QVariant
-from PyQt6.QtGui import QColor, QFont
-from PyQt6.QtWidgets import QApplication, QLabel, QWidget
-
-# ---------------------------------------------------------------------------
-# Configuration constants
-# ---------------------------------------------------------------------------
-
-OVERLAY_FONT_SIZE: int = 36          # pt — message text size
-OVERLAY_BACKGROUND: str = "#000000"  # black background
-OVERLAY_TEXT_COLOR: str = "#ffffff"  # white text
-OVERLAY_OPACITY: float = 1.0         # fully opaque
 
 logger = logging.getLogger(__name__)
 
+# Constantes Windows API
+WS_EX_TOPMOST = 0x00000008
+WS_EX_TOOLWINDOW = 0x00000080
+WS_POPUP = 0x80000000
+SW_SHOW = 5
+COLOR_WINDOW = 5
 
-# ---------------------------------------------------------------------------
-# BlankScreenOverlay
-# ---------------------------------------------------------------------------
+user32 = ctypes.windll.user32
+gdi32 = ctypes.windll.gdi32
+kernel32 = ctypes.windll.kernel32
+
+# --- Declarar tipos correctos para Windows x64 ---
+user32.DefWindowProcW.restype = ctypes.c_ssize_t
+user32.DefWindowProcW.argtypes = [
+    ctypes.wintypes.HWND,
+    ctypes.c_uint,
+    ctypes.c_size_t,    # WPARAM (64-bit)
+    ctypes.c_ssize_t,   # LPARAM (64-bit)
+]
+user32.CreateWindowExW.restype = ctypes.wintypes.HWND
+user32.CreateWindowExW.argtypes = [
+    ctypes.wintypes.DWORD,
+    ctypes.wintypes.LPCWSTR,
+    ctypes.wintypes.LPCWSTR,
+    ctypes.wintypes.DWORD,
+    ctypes.c_int, ctypes.c_int,
+    ctypes.c_int, ctypes.c_int,
+    ctypes.wintypes.HWND,
+    ctypes.wintypes.HMENU,
+    ctypes.wintypes.HINSTANCE,
+    ctypes.wintypes.LPVOID,
+]
+user32.PostMessageW.argtypes = [
+    ctypes.wintypes.HWND,
+    ctypes.c_uint,
+    ctypes.c_size_t,
+    ctypes.c_ssize_t,
+]
+# -------------------------------------------------
+
 
 class BlankScreenOverlay:
-    """Manages fullscreen black overlays across all monitors.
-
-    The class creates one :class:`QWidget` per screen returned by
-    :func:`QApplication.screens()`.  Each widget is frameless and stays
-    on top of all other windows, including the Windows taskbar.
-
-    Input blocking is achieved through :mod:`pynput` listeners started in
-    daemon threads with ``suppress=True``, which intercepts events at the
-    OS hook level before they reach any other application.
-
-    Note:
-        A :class:`QApplication` instance must exist before instantiating
-        this class (the agent's Qt loop or the teacher UI provides one).
-        On headless systems where Qt is unavailable, the class degrades
-        gracefully by logging a warning and disabling overlay windows.
-    """
+    """Overlay negro nativo de Windows sin depender de Qt."""
 
     def __init__(self) -> None:
-        self._overlays: list[QWidget] = []
-        self._kb_listener: Optional[threading.Thread] = None
-        self._ms_listener: Optional[threading.Thread] = None
         self._active: bool = False
-
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
+        self._thread: Optional[threading.Thread] = None
+        self._hwnd: Optional[int] = None
+        self._stop_event = threading.Event()
 
     def show(self, message: str = "Atención al frente") -> None:
-        """Display the blank-screen overlay on all monitors and block input.
-
-        Safe to call from any thread; the Qt widgets are created/shown in
-        the Qt main thread via :func:`QMetaObject.invokeMethod`.
-
-        Args:
-            message: Text displayed centred on the black overlay.
-        """
         if self._active:
-            logger.debug("BlankScreenOverlay already active — ignoring show().")
             return
-
         self._active = True
+        self._stop_event.clear()
         logger.info("BlankScreenOverlay: showing overlay (message=%r)", message)
-
-        # Build and show Qt windows from the main Qt thread.
-        app = QApplication.instance()
-        if app is None:
-            logger.warning(
-                "BlankScreenOverlay: no QApplication instance — overlay skipped."
-            )
-        else:
-            self._create_overlays(message)
-
-        # Start input blocking listeners in background threads.
-        self._start_input_block()
+        self._thread = threading.Thread(
+            target=self._run_overlay,
+            args=(message,),
+            daemon=True,
+            name="dlslab-overlay",
+        )
+        self._thread.start()
 
     def hide(self) -> None:
-        """Remove the blank-screen overlays and restore normal input.
-
-        Safe to call from any thread.
-        """
         if not self._active:
-            logger.debug("BlankScreenOverlay already inactive — ignoring hide().")
             return
-
         self._active = False
         logger.info("BlankScreenOverlay: hiding overlay.")
-
-        # Stop input block first so the teacher can interact normally.
-        self._stop_input_block()
-
-        # Destroy Qt windows from the main Qt thread.
-        self._destroy_overlays()
+        self._stop_event.set()
+        if self._hwnd:
+            try:
+                user32.PostMessageW(self._hwnd, 0x0012, 0, 0)  # WM_QUIT
+            except Exception:
+                pass
+        self._hwnd = None
 
     @property
     def active(self) -> bool:
-        """``True`` if the overlay is currently displayed."""
         return self._active
 
-    # ------------------------------------------------------------------
-    # Overlay creation / destruction
-    # ------------------------------------------------------------------
-
-    def _create_overlays(self, message: str) -> None:
-        """Create one fullscreen overlay widget per connected monitor.
-
-        Called in the Qt main thread (or proxied to it when invoked from
-        a non-Qt thread via :func:`_run_in_qt_thread`).
-
-        Args:
-            message: Text to centre on each overlay.
-        """
-        screens = QApplication.screens()
-        if not screens:
-            logger.warning("BlankScreenOverlay: no screens found.")
-            return
-
-        for screen in screens:
-            overlay = _build_overlay_widget(message, screen.geometry())
-            self._overlays.append(overlay)
-            overlay.show()
-            overlay.raise_()
-            overlay.activateWindow()
-
-        logger.debug(
-            "BlankScreenOverlay: %d overlay(s) created.", len(self._overlays)
-        )
-
-    def _destroy_overlays(self) -> None:
-        """Close and delete all overlay widgets."""
-        for overlay in self._overlays:
-            try:
-                overlay.hide()
-                overlay.close()
-                overlay.deleteLater()
-            except Exception as exc:  # pragma: no cover
-                logger.debug("Error closing overlay: %s", exc)
-        self._overlays.clear()
-        logger.debug("BlankScreenOverlay: all overlays destroyed.")
-
-    # ------------------------------------------------------------------
-    # Input blocking
-    # ------------------------------------------------------------------
-
-    def _start_input_block(self) -> None:
-        """Start pynput keyboard and mouse listeners with suppress=True.
-
-        Each listener runs in its own daemon thread so it does not block
-        the asyncio event loop.
-        """
+    def _run_overlay(self, message: str) -> None:
+        """Crea y muestra la ventana overlay en su propio hilo con message loop."""
         try:
-            from pynput import keyboard as kb_mod, mouse as ms_mod
-        except ImportError:
-            logger.warning(
-                "pynput not installed — input blocking disabled. "
-                "Install it with: pip install pynput"
+            hinstance = kernel32.GetModuleHandleW(None)
+            class_name = "DLSlabOverlay"
+
+            WNDPROC = ctypes.WINFUNCTYPE(
+                ctypes.c_ssize_t,
+                ctypes.wintypes.HWND,
+                ctypes.c_uint,
+                ctypes.c_size_t,
+                ctypes.c_ssize_t,
             )
-            return
 
-        # Keyboard listener — suppress all key events.
-        self._kb_listener = threading.Thread(
-            target=self._run_keyboard_listener,
-            args=(kb_mod,),
-            daemon=True,
-            name="dlslab-kb-block",
-        )
-        self._kb_listener.start()
+            def wnd_proc(hwnd, msg, wparam, lparam):
+                WM_DESTROY     = 0x0002
+                WM_PAINT       = 0x000F
+                WM_KEYDOWN     = 0x0100
+                WM_SYSKEYDOWN  = 0x0104
+                WM_MOUSEMOVE   = 0x0200
+                WM_LBUTTONDOWN = 0x0201
+                WM_RBUTTONDOWN = 0x0204
+                if msg == WM_DESTROY:
+                    user32.PostQuitMessage(0)
+                    return 0
+                elif msg == WM_PAINT:
+                    ps = ctypes.create_string_buffer(64)
+                    hdc = user32.BeginPaint(hwnd, ps)
+                    rc = ctypes.wintypes.RECT()
+                    user32.GetClientRect(hwnd, ctypes.byref(rc))
+                    hbrush = gdi32.CreateSolidBrush(0x00000000)
+                    user32.FillRect(hdc, ctypes.byref(rc), hbrush)
+                    gdi32.DeleteObject(hbrush)
+                    gdi32.SetTextColor(hdc, 0x00FFFFFF)
+                    gdi32.SetBkMode(hdc, 1)
+                    user32.DrawTextW(hdc, message, -1, ctypes.byref(rc), 0x25)
+                    user32.EndPaint(hwnd, ps)
+                    return 0
+                elif msg in (WM_KEYDOWN, WM_SYSKEYDOWN, WM_MOUSEMOVE,
+                             WM_LBUTTONDOWN, WM_RBUTTONDOWN):
+                    return 0
+                return user32.DefWindowProcW(hwnd, msg, wparam, lparam)
 
-        # Mouse listener — suppress all mouse events.
-        self._ms_listener = threading.Thread(
-            target=self._run_mouse_listener,
-            args=(ms_mod,),
-            daemon=True,
-            name="dlslab-ms-block",
-        )
-        self._ms_listener.start()
+            wnd_proc_cb = WNDPROC(wnd_proc)
 
-        logger.info("BlankScreenOverlay: input blocking started.")
+            class WNDCLASSW(ctypes.Structure):
+                _fields_ = [
+                    ("style",         ctypes.c_uint),
+                    ("lpfnWndProc",   WNDPROC),
+                    ("cbClsExtra",    ctypes.c_int),
+                    ("cbWndExtra",    ctypes.c_int),
+                    ("hInstance",     ctypes.wintypes.HINSTANCE),
+                    ("hIcon",         ctypes.wintypes.HICON),
+                    ("hCursor",       ctypes.wintypes.HANDLE),
+                    ("hbrBackground", ctypes.wintypes.HBRUSH),
+                    ("lpszMenuName",  ctypes.wintypes.LPCWSTR),
+                    ("lpszClassName", ctypes.wintypes.LPCWSTR),
+                ]
 
-    def _stop_input_block(self) -> None:
-        """Stop the pynput listeners if they are running."""
-        # Listeners are stored as attributes on the thread objects; stop them.
-        for attr in ("_kb_listener_obj", "_ms_listener_obj"):
-            listener = getattr(self, attr, None)
-            if listener is not None:
-                try:
-                    listener.stop()
-                except Exception as exc:
-                    logger.debug("Error stopping listener: %s", exc)
-                setattr(self, attr, None)
+            wc = WNDCLASSW()
+            wc.lpfnWndProc   = wnd_proc_cb
+            wc.hInstance     = hinstance
+            wc.lpszClassName = class_name
+            wc.hbrBackground = gdi32.CreateSolidBrush(0x00000000)
+            user32.RegisterClassW(ctypes.byref(wc))
 
-        self._kb_listener = None
-        self._ms_listener = None
-        logger.info("BlankScreenOverlay: input blocking stopped.")
+            sw = user32.GetSystemMetrics(0)
+            sh = user32.GetSystemMetrics(1)
 
-    def _run_keyboard_listener(self, kb_mod: object) -> None:
-        """Target for the keyboard-blocking daemon thread.
+            hwnd = user32.CreateWindowExW(
+                WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
+                class_name, "DLSlab", WS_POPUP,
+                0, 0, sw, sh,
+                None, None, hinstance, None,
+            )
 
-        Args:
-            kb_mod: The ``pynput.keyboard`` module (passed in to avoid a
-                    circular import at module level).
-        """
-        listener = kb_mod.Listener(  # type: ignore[attr-defined]
-            on_press=lambda key: False,
-            on_release=lambda key: False,
-            suppress=True,
-        )
-        self._kb_listener_obj = listener
-        listener.start()
-        listener.join()
+            if not hwnd:
+                logger.error("BlankScreenOverlay: no se pudo crear la ventana nativa.")
+                return
 
-    def _run_mouse_listener(self, ms_mod: object) -> None:
-        """Target for the mouse-blocking daemon thread.
+            self._hwnd = hwnd
+            user32.ShowWindow(hwnd, SW_SHOW)
+            user32.UpdateWindow(hwnd)
+            logger.info("BlankScreenOverlay: ventana nativa mostrada (%dx%d)", sw, sh)
 
-        Args:
-            ms_mod: The ``pynput.mouse`` module (passed in to avoid a
-                    circular import at module level).
-        """
-        listener = ms_mod.Listener(  # type: ignore[attr-defined]
-            on_move=lambda x, y: False,
-            on_click=lambda x, y, button, pressed: False,
-            on_scroll=lambda x, y, dx, dy: False,
-            suppress=True,
-        )
-        self._ms_listener_obj = listener
-        listener.start()
-        listener.join()
+            msg_struct = ctypes.wintypes.MSG()
+            while not self._stop_event.is_set():
+                result = user32.PeekMessageW(ctypes.byref(msg_struct), None, 0, 0, 1)
+                if result:
+                    if msg_struct.message == 0x0012:  # WM_QUIT
+                        break
+                    user32.TranslateMessage(ctypes.byref(msg_struct))
+                    user32.DispatchMessageW(ctypes.byref(msg_struct))
+                else:
+                    self._stop_event.wait(timeout=0.016)
 
+            user32.DestroyWindow(hwnd)
+            user32.UnregisterClassW(class_name, hinstance)
+            logger.info("BlankScreenOverlay: ventana nativa destruida.")
 
-# ---------------------------------------------------------------------------
-# Helper: build one overlay window
-# ---------------------------------------------------------------------------
-
-def _build_overlay_widget(message: str, geometry: "QRect") -> QWidget:  # type: ignore[name-defined]  # noqa: F821
-    """Create a single fullscreen black overlay widget for the given geometry.
-
-    Args:
-        message:  Text to display centred in the widget.
-        geometry: Screen geometry (position + size) obtained from
-                  :meth:`QScreen.geometry`.
-
-    Returns:
-        A :class:`QWidget` configured as a frameless, always-on-top,
-        fullscreen black window — **not yet shown**.
-    """
-    overlay = QWidget()
-    overlay.setWindowFlags(
-        Qt.WindowType.FramelessWindowHint
-        | Qt.WindowType.WindowStaysOnTopHint
-        | Qt.WindowType.Tool
-    )
-    overlay.setGeometry(geometry)
-    overlay.setStyleSheet(f"background-color: {OVERLAY_BACKGROUND};")
-    overlay.setWindowOpacity(OVERLAY_OPACITY)
-
-    # Centred message label.
-    label = QLabel(message, overlay)
-    label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    label.setGeometry(0, 0, geometry.width(), geometry.height())
-
-    font = QFont()
-    font.setPointSize(OVERLAY_FONT_SIZE)
-    font.setBold(True)
-    label.setFont(font)
-    label.setStyleSheet(f"color: {OVERLAY_TEXT_COLOR}; background: transparent;")
-    label.setWordWrap(True)
-
-    return overlay
+        except Exception as exc:
+            logger.exception("BlankScreenOverlay: error en overlay nativo: %s", exc)

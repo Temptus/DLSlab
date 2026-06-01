@@ -481,8 +481,23 @@ class ThumbnailWidget(QWidget):
             event: The Qt context-menu event triggered by a right-click.
         """
         menu = QMenu(self)
-        present_action = menu.addAction("📺 Presentar al resto")
+        present_action = menu.addAction("📺 Presentar al resto ")
+        block_action = menu.addAction("🔒 Bloquear")
+        menu.setStyleSheet("""
+                QMenu {
+                    background-color: #f0f0f0;
+                    border: 1px solid #ccc;
+                }
+                QMenu::item {
+                    padding: 8px 12px;
+                }
+                QMenu::item:selected {
+                    background-color: #0078d7;   /* azul Windows 11 */
+                    color: white;
+                }
+            """)
         action = menu.exec(event.globalPos())
+
         if action == present_action:
             self.present_requested.emit(self.client_id)
 

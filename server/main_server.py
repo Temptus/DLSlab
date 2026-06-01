@@ -128,6 +128,7 @@ class DLSlabServer:
             self._handle_client,
             host=self.host,
             port=self.port,
+            limit=10 * 1024 * 1024  # 10 MB maximum buffer size for StreamReader (matches MAX_MESSAGE_BYTES)
         )
         addr = self._server.sockets[0].getsockname()
         logger.info("DLSlab server listening on %s:%s", addr[0], addr[1])
