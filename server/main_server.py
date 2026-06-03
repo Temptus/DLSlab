@@ -115,6 +115,7 @@ class DLSlabServer:
         self.clients = ClientManager()
         self.wol_manager = WolManager(self.clients)
         self._server: asyncio.AbstractServer | None = None
+        self._stop_event: asyncio.Event | None = None
         self._streamer = TeacherScreenStreamer(self)
         self._student_streamer = StudentStreamer(self)
 
@@ -124,6 +125,7 @@ class DLSlabServer:
 
     async def start(self) -> None:
         """Start listening for incoming client connections."""
+        self._stop_event = asyncio.Event()
         self._server = await asyncio.start_server(
             self._handle_client,
             host=self.host,
@@ -132,15 +134,27 @@ class DLSlabServer:
         )
         addr = self._server.sockets[0].getsockname()
         logger.info("DLSlab server listening on %s:%s", addr[0], addr[1])
-        async with self._server:
-            await self._server.serve_forever()
+
+        # Wait until stop() signals shutdown
+        await self._stop_event.wait()
+
+        # Stop accepting new connections
+        self._server.close()
+
+        # Cancel all active client handler tasks so wait_closed() doesn't hang
+        current = asyncio.current_task()
+        tasks = [t for t in asyncio.all_tasks() if t is not current]
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+        await self._server.wait_closed()
+        logger.info("DLSlab server stopped.")
 
     async def stop(self) -> None:
         """Gracefully shut down the server."""
-        if self._server:
-            self._server.close()
-            await self._server.wait_closed()
-            logger.info("DLSlab server stopped.")
+        if self._stop_event:
+            self._stop_event.set()
 
     async def send_to_client(self, client_id: str, message: Message) -> bool:
         """Send *message* to a specific client.

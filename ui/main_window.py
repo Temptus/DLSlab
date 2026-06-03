@@ -285,8 +285,18 @@ class MainWindow(QMainWindow):
             asyncio.set_event_loop(self._loop)
             try:
                 self._loop.run_until_complete(self._server.start())
+            except asyncio.CancelledError:
+                pass  # Cierre normal al detener el servidor
+            except RuntimeError as exc:
+                if "Event loop stopped before Future completed" not in str(exc):
+                    logger.exception("Server error: %s", exc)
             except Exception as exc:
                 logger.exception("Server error: %s", exc)
+            finally:
+                try:
+                    self._loop.close()
+                except Exception:
+                    pass
 
         self._server_thread = threading.Thread(target=_run, daemon=True, name="dlslab-server")
         self._server_thread.start()
@@ -867,7 +877,7 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event: "QCloseEvent") -> None:  # noqa: N802
         """Stop the server thread when the window is closed."""
         self._timer.stop()
-        if self._server and self._loop:
+        if self._server and self._loop and self._loop.is_running():
             if self._server._streamer.is_streaming:
                 asyncio.run_coroutine_threadsafe(
                     self._server.stop_show_teacher(None), self._loop
@@ -876,7 +886,16 @@ class MainWindow(QMainWindow):
                 asyncio.run_coroutine_threadsafe(
                     self._server.stop_show_student(), self._loop
                 )
-            asyncio.run_coroutine_threadsafe(self._server.stop(), self._loop)
+            # Señalizar al servidor que se detenga; start() retornará limpiamente
+            stop_future = asyncio.run_coroutine_threadsafe(
+                self._server.stop(), self._loop
+            )
+            try:
+                stop_future.result(timeout=5)
+            except Exception:
+                pass
+        if hasattr(self, "_server_thread") and self._server_thread.is_alive():
+            self._server_thread.join(timeout=5)
         super().closeEvent(event)
 
     # ------------------------------------------------------------------
