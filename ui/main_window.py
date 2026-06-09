@@ -56,6 +56,9 @@ from ui.policy_dialog import PolicyDialog
 from ui.power_dialog import PowerDialog
 from ui.thumbnail_widget import ThumbnailWidget
 
+from qt_material import apply_stylesheet
+import qtawesome as qta
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -106,7 +109,7 @@ class MainWindow(QMainWindow):
         """Build the main window UI."""
         self.setWindowTitle(WINDOW_TITLE)
         self.resize(WINDOW_WIDTH, WINDOW_HEIGHT)
-        self.setStyleSheet("background-color: #dadada;")
+        # self.setStyleSheet("background-color: #dadada;")
 
         # ---- Menu bar ----
         menu_bar = self.menuBar()
@@ -123,25 +126,35 @@ class MainWindow(QMainWindow):
         about_action = QAction("Acerca de...", self)
         about_action.triggered.connect(self.show_about_dialog)
         help_menu.addAction(about_action)
-        menu_bar.setStyleSheet(
-            "QMenuBar::item:hover { background: #e1e1e1; }"
-            "QMenu { background: #f0f0f0; } QMenu::item {padding: 8px 8px;}"
-            "QMenu::item:selected { background: #0078d7; color: #fff; border-radius: 5px; padding: 8px 8px; }"
-        )
+        # menu_bar.setStyleSheet(
+        #     "QMenuBar::item:hover { background: #e1e1e1; }"
+        #     "QMenu { background: #f0f0f0; } QMenu::item {padding: 8px 8px;}"
+        #     "QMenu::item:selected { background: #0078d7; color: #fff; border-radius: 5px; padding: 8px 8px; }"
+        # )
 
 
 
         # ---- Toolbar ----
         toolbar = QToolBar("Controls", self)
         toolbar.setMovable(False)
-        toolbar.setStyleSheet(
-            "QToolBar { background: #f0f0f0; border-bottom: 1px solid #b9b9b9; border-top: 1px solid #fff; spacing: 6px; }"
-            "QToolButton { background: #f0f0f0;  color: #000; padding: 5px 5px; border-radius: 4px; font: 18pt; }"
-            "QToolButton:hover { background: #dadada; }"
-        )
+        # toolbar.setStyleSheet(
+        #     "QToolBar { background: #f0f0f0; border-bottom: 1px solid #b9b9b9; border-top: 1px solid #fff; spacing: 6px; }"
+        #     "QToolButton { background: #f0f0f0;  color: #000; padding: 5px 5px; border-radius: 4px; font: 18pt; }"
+        #     "QToolButton:hover { background: #dadada; }"
+        # )
         self.addToolBar(toolbar)
 
-        self._lock_action = QAction("🔒", self)
+        icon_lock = qta.icon('fa6s.lock', color='red')
+        icon_unlock = qta.icon('fa6s.lock-open', color='#00f0ff')
+        icon_present = qta.icon('fa6s.person-chalkboard', color='#00f0ff')
+        icon_stop_stream = qta.icon('fa6s.circle-stop', color='#00f0ff')
+        icon_stop_student_stream = qta.icon('fa6s.stop', color='#00f0ff')
+        icon_policies = qta.icon('fa6s.building-shield', color='#00f0ff')
+        icon_energy = qta.icon('fa6s.bolt', color='#00f0ff')
+        icon_power_off = qta.icon('fa6s.power-off', color='#00f0ff')
+
+        self._lock_action = QAction("", self)
+        self._lock_action.setIcon(icon_lock)
         self._lock_action.setToolTip("Bloquear Pantalla")
         # self._lock_action.setDisabled(True)  # Disabled until at least one client connects
         self._lock_action.triggered.connect(self._open_blank_screen_dialog)
@@ -151,7 +164,8 @@ class MainWindow(QMainWindow):
             action_widget.setCursor(Qt.CursorShape.PointingHandCursor)
 
 
-        self._unlock_action = QAction("🔓", self)
+        self._unlock_action = QAction("", self)
+        self._unlock_action.setIcon(icon_unlock)
         self._unlock_action.setToolTip("Desbloquear Pantallas")
         self._unlock_action.triggered.connect(self._unblank_all)
         toolbar.addAction(self._unlock_action)
@@ -161,7 +175,8 @@ class MainWindow(QMainWindow):
 
         toolbar.addSeparator()
 
-        self._stream_action = QAction("📡", self)
+        self._stream_action = QAction("", self)
+        self._stream_action.setIcon(icon_present)
         self._stream_action.setToolTip("Transmitir Mi Pantalla")
         self._stream_action.triggered.connect(self._open_show_teacher_dialog)
         toolbar.addAction(self._stream_action)
@@ -169,7 +184,8 @@ class MainWindow(QMainWindow):
         if action_widget is not None:
             action_widget.setCursor(Qt.CursorShape.PointingHandCursor)
 
-        self._stop_stream_action = QAction("⏹️", self)
+        self._stop_stream_action = QAction("️", self)
+        self._stop_stream_action.setIcon(icon_stop_stream)
         self._stop_stream_action.setToolTip("Detener la transmisión de pantalla activa")
         self._stop_stream_action.setEnabled(False)
         self._stop_stream_action.triggered.connect(self._stop_show_teacher)
@@ -180,15 +196,16 @@ class MainWindow(QMainWindow):
 
         # Live indicator label (hidden until streaming starts)
         self._live_label = QLabel("  🔴 EN VIVO")
-        self._live_label.setStyleSheet(
-            "color: #ff4444; font-weight: bold; padding: 0 8px;"
-        )
+        # self._live_label.setStyleSheet(
+        #     "color: #ff4444; font-weight: bold; padding: 0 8px;"
+        # )
         self._live_label.hide()
         toolbar.addWidget(self._live_label)
 
         toolbar.addSeparator()
 
-        self._stop_student_action = QAction("⏹️", self)
+        self._stop_student_action = QAction("", self)
+        self._stop_student_action.setIcon(icon_stop_student_stream)
         self._stop_student_action.setToolTip(
             "Detener la presentación de alumno activa"
         )
@@ -201,15 +218,16 @@ class MainWindow(QMainWindow):
 
         # Presentation indicator label (hidden until a student is presenting)
         self._student_presentation_label = QLabel()
-        self._student_presentation_label.setStyleSheet(
-            "color: #66bb6a; font-weight: bold; padding: 0 8px;"
-        )
+        # self._student_presentation_label.setStyleSheet(
+        #     "color: #66bb6a; font-weight: bold; padding: 0 8px;"
+        # )
         self._student_presentation_label.hide()
         toolbar.addWidget(self._student_presentation_label)
 
         toolbar.addSeparator()
 
-        self._policy_action = QAction("🚦", self)
+        self._policy_action = QAction("", self)
+        self._policy_action.setIcon(icon_policies)
         self._policy_action.setToolTip("Configurar políticas de aplicaciones y web")
         self._policy_action.triggered.connect(self._open_policy_dialog)
         toolbar.addAction(self._policy_action)
@@ -217,7 +235,8 @@ class MainWindow(QMainWindow):
         if action_widget is not None:
             action_widget.setCursor(Qt.CursorShape.PointingHandCursor)
 
-        self._power_action = QAction("⚡", self)
+        self._power_action = QAction("", self)
+        self._power_action.setIcon(icon_energy)
         self._power_action.setToolTip("Abrir control de energía y Wake-on-LAN")
         self._power_action.triggered.connect(self._open_power_dialog)
         toolbar.addAction(self._power_action)
@@ -225,7 +244,8 @@ class MainWindow(QMainWindow):
         if action_widget is not None:
             action_widget.setCursor(Qt.CursorShape.PointingHandCursor)
 
-        self._emergency_shutdown_action = QAction("🔴", self)
+        self._emergency_shutdown_action = QAction("", self)
+        self._emergency_shutdown_action.setIcon(icon_power_off)
         self._emergency_shutdown_action.setToolTip("Apagar todos los equipos")
         self._emergency_shutdown_action.triggered.connect(self._emergency_shutdown_all)
         toolbar.addAction(self._emergency_shutdown_action)
@@ -246,13 +266,13 @@ class MainWindow(QMainWindow):
         font.setPointSize(14)
         font.setBold(True)
         title.setFont(font)
-        title.setStyleSheet("color: #000;")
+        # title.setStyleSheet("color: #000;")
         main_layout.addWidget(title)
 
         # Scroll area containing the thumbnail grid
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("border: none;")
+        # scroll.setStyleSheet("border: none;")
         main_layout.addWidget(scroll)
 
         self._grid_container = QWidget()
@@ -267,7 +287,7 @@ class MainWindow(QMainWindow):
         self._status_bar = QStatusBar()
         self.setStatusBar(self._status_bar)
         self._status_bar.showMessage("Server starting…")
-        self._status_bar.setStyleSheet("border-top: 1px solid #b9b9b9;")
+        # self._status_bar.setStyleSheet("border-top: 1px solid #b9b9b9;")
 
     # ------------------------------------------------------------------
     # Server integration
@@ -921,6 +941,7 @@ def main() -> None:
         datefmt="%Y-%m-%d %H:%M:%S",
     )
     app = QApplication(sys.argv)
+    apply_stylesheet(app, theme='dark_blue.xml')
     app.setApplicationName("DLSlab")
     window = MainWindow()
     window.show()
@@ -954,10 +975,10 @@ class BlankScreenDialog(QDialog):
         self.setWindowTitle("🔒 Bloquear Pantallas")
         self.setMinimumWidth(420)
         self._setup_ui()
-        self.setStyleSheet(
-            "QRadioButton::indicator:unchecked { border: 1px solid #555; border-radius: 8px; background: #dadada; }"
-            "QRadioButton::indicator:checked { border: 3px solid #555; border-radius: 8px; background: #7bf279; }"
-        )
+        # self.setStyleSheet(
+        #     "QRadioButton::indicator:unchecked { border: 1px solid #555; border-radius: 8px; background: #dadada; }"
+        #     "QRadioButton::indicator:checked { border: 3px solid #555; border-radius: 8px; background: #7bf279; }"
+        # )
 
     # ------------------------------------------------------------------
     # UI setup
@@ -1074,10 +1095,10 @@ class ShowTeacherDialog(QDialog):
         self.setWindowTitle("📡 Transmitir Mi Pantalla")
         self.setMinimumWidth(440)
         self._setup_ui()
-        self.setStyleSheet(
-            "QRadioButton::indicator:unchecked { border: 1px solid #555; border-radius: 8px; background: #dadada; }"
-            "QRadioButton::indicator:checked { border: 3px solid #555; border-radius: 8px; background: #7bf279; }"
-        )
+        # self.setStyleSheet(
+        #     "QRadioButton::indicator:unchecked { border: 1px solid #555; border-radius: 8px; background: #dadada; }"
+        #     "QRadioButton::indicator:checked { border: 3px solid #555; border-radius: 8px; background: #7bf279; }"
+        # )
 
     # ------------------------------------------------------------------
     # UI setup
