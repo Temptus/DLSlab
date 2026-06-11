@@ -109,7 +109,7 @@ class MainWindow(QMainWindow):
         """Build the main window UI."""
         self.setWindowTitle(WINDOW_TITLE)
         self.resize(WINDOW_WIDTH, WINDOW_HEIGHT)
-        # self.setStyleSheet("background-color: #dadada;")
+        # self.setStyleSheet("background-color: white;")
 
         # ---- Menu bar ----
         menu_bar = self.menuBar()
@@ -144,14 +144,15 @@ class MainWindow(QMainWindow):
         # )
         self.addToolBar(toolbar)
 
-        icon_lock = qta.icon('fa6s.lock', color='red')
-        icon_unlock = qta.icon('fa6s.lock-open', color='#00f0ff')
-        icon_present = qta.icon('fa6s.person-chalkboard', color='#00f0ff')
-        icon_stop_stream = qta.icon('fa6s.circle-stop', color='#00f0ff')
-        icon_stop_student_stream = qta.icon('fa6s.stop', color='#00f0ff')
-        icon_policies = qta.icon('fa6s.building-shield', color='#00f0ff')
-        icon_energy = qta.icon('fa6s.bolt', color='#00f0ff')
-        icon_power_off = qta.icon('fa6s.power-off', color='#00f0ff')
+        # Icons
+        icon_lock = qta.icon('fa6s.lock', color='#ba0c2f')
+        icon_unlock = qta.icon('fa6s.lock-open', color='#ba0c2f')
+        icon_present = qta.icon('fa6s.person-chalkboard', color='#ba0c2f')
+        icon_stop_stream = qta.icon('fa6s.circle-stop', color='#ba0c2f')
+        icon_stop_student_stream = qta.icon('fa6s.stop', color='#ba0c2f')
+        icon_policies = qta.icon('fa6s.building-shield', color='#ba0c2f')
+        icon_energy = qta.icon('fa6s.bolt', color='#ba0c2f')
+        icon_power_off = qta.icon('fa6s.power-off', color='#ba0c2f')
 
         self._lock_action = QAction("", self)
         self._lock_action.setIcon(icon_lock)
@@ -274,6 +275,7 @@ class MainWindow(QMainWindow):
         scroll.setWidgetResizable(True)
         # scroll.setStyleSheet("border: none;")
         main_layout.addWidget(scroll)
+
 
         self._grid_container = QWidget()
         self._grid_layout = QGridLayout(self._grid_container)
@@ -941,7 +943,18 @@ def main() -> None:
         datefmt="%Y-%m-%d %H:%M:%S",
     )
     app = QApplication(sys.argv)
-    apply_stylesheet(app, theme='dark_blue.xml')
+    extra = {
+        # Button colors
+        'danger': '#dc3545',
+        'warning': '#ffc107',
+        'success': '#4caf50',
+        'info': '#17a2b8',
+        'density_scale': '-2',
+
+        # Font
+        'font_family': 'Roboto',
+    }
+    apply_stylesheet(app, theme='light_red.xml', invert_secondary=True, extra=extra)
     app.setApplicationName("DLSlab")
     window = MainWindow()
     window.show()
@@ -1023,6 +1036,7 @@ class BlankScreenDialog(QDialog):
             | QDialogButtonBox.StandardButton.Cancel
         )
         buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Aplicar bloqueo")
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setProperty('class', 'success')
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -1161,6 +1175,7 @@ class ShowTeacherDialog(QDialog):
         buttons.button(QDialogButtonBox.StandardButton.Ok).setText(
             "Iniciar Transmisión"
         )
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setProperty('class', 'success')
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)

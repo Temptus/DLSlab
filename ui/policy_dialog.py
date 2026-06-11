@@ -57,10 +57,6 @@ class PolicyDialog(QDialog):
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
-        self.setStyleSheet(
-            "QRadioButton::indicator:unchecked { border: 1px solid #555; border-radius: 8px; background: #dadada; }"
-            "QRadioButton::indicator:checked { border: 3px solid #555; border-radius: 8px; background: #7bf279; }"
-        )
 
         tabs = QTabWidget()
         tabs.addTab(self._build_app_tab(), "🖥️ Aplicaciones")

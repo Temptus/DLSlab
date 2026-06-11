@@ -28,15 +28,19 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+import qtawesome as qta
 
 DEFAULT_DELAY_SECONDS: int = 5
 MAX_DELAY_SECONDS: int = 60
 USER_ROLE: Qt.ItemDataRole = Qt.ItemDataRole.UserRole
 
 URL_SHORTCUTS: dict[str, str] = {
+    "Office 365": "https://login.microsoftonline.com/",
     "Google Classroom": "https://classroom.google.com",
-    "Moodle": "https://moodle.org",
-    "YouTube": "https://www.youtube.com",
+    "Gmetrix": "https://www.gmetrix.net/Login.aspx",
+    "Certiport": "https://app.certiport.com/portal/login",
+    "IBEC Learning": "https://ibeclearning.com/login",
+    "AMCO Aluzo": "https://idp.amco.me/signin",
 }
 
 
@@ -78,10 +82,6 @@ class PowerDialog(QDialog):
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
-        self.setStyleSheet(
-            "QRadioButton::indicator:unchecked { border: 1px solid #555; border-radius: 8px; background: #dadada; }"
-            "QRadioButton::indicator:checked { border: 3px solid #555; border-radius: 8px; background: #7bf279; }"
-        )
 
         layout.addWidget(self._build_power_section())
         layout.addWidget(self._build_remote_exec_section())
@@ -91,41 +91,51 @@ class PowerDialog(QDialog):
         box = QGroupBox("⚡ Control de Energía")
         layout = QVBoxLayout(box)
 
+        # Icons
+        icon_power_off = qta.icon('fa6s.power-off', color='#fff')
+        icon_restart = qta.icon('fa6s.arrows-rotate', color='#fff')
+        icon_lock = qta.icon('fa6s.lock', color='#fff')
+        icon_logout = qta.icon('fa6s.arrow-right-to-bracket', color='#fff')
+
         row = QHBoxLayout()
-        self._shutdown_btn = QPushButton("🔴 Apagar Todo")
+        self._shutdown_btn = QPushButton("Apagar Todo")
         self._shutdown_btn.setStyleSheet(
-            "QPushButton { background: #c62828; color: white; font-weight: bold; padding: 8px; }"
-            "QPushButton:pressed { background: #b71c1c; padding-left: 10px; padding-top: 10px; }"
+            "QPushButton { background: #f44336; border: 0; color: white; font-weight: bold; padding: 8px; }"
+            "QPushButton:pressed { background: #c82333; padding-left: 10px; padding-top: 10px; }"
         )
         self._shutdown_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._shutdown_btn.setIcon(icon_power_off)
         self._shutdown_btn.clicked.connect(self._on_shutdown_clicked)
         row.addWidget(self._shutdown_btn)
 
-        self._restart_btn = QPushButton("🔄 Reiniciar Todo")
+        self._restart_btn = QPushButton("Reiniciar Todo")
         self._restart_btn.setStyleSheet(
-            "QPushButton { background: #ef6c00; color: white; font-weight: bold; padding: 8px; }"
-            "QPushButton:pressed { background: #E65100; padding-left: 10px; padding-top: 10px; }"
+            "QPushButton { background: #FF9800; border: 0; color: white; font-weight: bold; padding: 8px; }"
+            "QPushButton:pressed { background: #e0a800; padding-left: 10px; padding-top: 10px; }"
         )
         self._restart_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._restart_btn.setIcon(icon_restart)
         self._restart_btn.clicked.connect(self._on_restart_clicked)
         row.addWidget(self._restart_btn)
         layout.addLayout(row)
 
         row2 = QHBoxLayout()
-        self._lock_btn = QPushButton("🔒 Bloquear Estaciones")
+        self._lock_btn = QPushButton("Bloquear Estaciones")
         self._lock_btn.setStyleSheet(
-            "QPushButton { background: #424242; color: white; font-weight: bold; padding: 8px; }"
-            "QPushButton:pressed { background: #1C1C1C; padding-left: 10px; padding-top: 10px; }"
+            "QPushButton { background: #4CAF50; border: 0; color: white; font-weight: bold; padding: 8px; }"
+            "QPushButton:pressed { background: #218838; padding-left: 10px; padding-top: 10px; }"
         )
         self._lock_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._lock_btn.setIcon(icon_lock)
         self._lock_btn.clicked.connect(self._on_lock_clicked)
         row2.addWidget(self._lock_btn)
-        self._logout_btn = QPushButton("🚪 Cerrar Sesión")
+        self._logout_btn = QPushButton("Cerrar Sesión")
         self._logout_btn.setStyleSheet(
-            "QPushButton { background: #1976D2; color: white; font-weight: bold; padding: 8px; }"
-            "QPushButton:pressed { background: #1565C0; padding-left: 10px; padding-top: 10px; }"
+            "QPushButton { background: #00BCD4; border: 0; color: white; font-weight: bold; padding: 8px;}"
+            "QPushButton:pressed { background: #138496; padding-left: 10px; padding-top: 10px; }"
         )
         self._logout_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._logout_btn.setIcon(icon_logout)
         self._logout_btn.clicked.connect(self._on_logout_clicked)
 
         row2.addWidget(self._logout_btn)
@@ -158,11 +168,19 @@ class PowerDialog(QDialog):
         box = QGroupBox("🌐 Ejecución Remota")
         layout = QVBoxLayout(box)
 
+        # Icons
+        icon_open_url = qta.icon('fa6s.globe', color='#00BCD4')
+        icon_browse = qta.icon('fa6s.folder-open', color='#FF9800')
+        icon_run = qta.icon('fa6s.play', color='#4CAF50')
+
         url_row = QHBoxLayout()
         self._url_edit = QLineEdit()
         self._url_edit.setPlaceholderText("https://...")
         url_row.addWidget(self._url_edit)
-        self._open_url_btn = QPushButton("🌐 Abrir URL en todos")
+        self._open_url_btn = QPushButton("Abrir URL en todos")
+        self._open_url_btn.setStyleSheet("border: 2px solid #00BCD4; color: #00BCD4")
+        self._open_url_btn.setIcon(icon_open_url)
+        self._open_url_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._open_url_btn.clicked.connect(self._on_open_url_clicked)
         url_row.addWidget(self._open_url_btn)
         layout.addLayout(url_row)
@@ -179,7 +197,10 @@ class PowerDialog(QDialog):
         self._app_path_edit = QLineEdit()
         self._app_path_edit.setPlaceholderText(r"C:\Ruta\App.exe")
         app_row.addWidget(self._app_path_edit)
-        browse_btn = QPushButton("📁")
+        browse_btn = QPushButton("")
+        browse_btn.setProperty("class", "warning")
+        browse_btn.setIcon(icon_browse)
+        browse_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         browse_btn.clicked.connect(self._on_browse_app_clicked)
         app_row.addWidget(browse_btn)
         layout.addLayout(app_row)
@@ -189,7 +210,10 @@ class PowerDialog(QDialog):
         self._app_args_edit = QLineEdit()
         self._app_args_edit.setPlaceholderText("--flag valor")
         args_row.addWidget(self._app_args_edit)
-        self._run_app_btn = QPushButton("▶️ Ejecutar App")
+        self._run_app_btn = QPushButton("Ejecutar App")
+        self._run_app_btn.setProperty("class", "success")
+        self._run_app_btn.setIcon(icon_run)
+        self._run_app_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._run_app_btn.clicked.connect(self._on_run_app_clicked)
         args_row.addWidget(self._run_app_btn)
         layout.addLayout(args_row)
@@ -200,6 +224,10 @@ class PowerDialog(QDialog):
         layout = QVBoxLayout(box)
         layout.addWidget(QLabel("Equipos desconectados con MAC conocida:"))
 
+        # Icons
+        icon_energy = qta.icon('fa6s.bolt', color='#FF9800')
+        icon_energy_all = qta.icon('fa6s.plug', color='#4CAF50')
+
         self._offline_list = QListWidget()
         self._offline_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
         for client_id, mac in sorted(self._disconnected_clients.items()):
@@ -209,10 +237,16 @@ class PowerDialog(QDialog):
         layout.addWidget(self._offline_list)
 
         wol_row = QHBoxLayout()
-        wol_selected = QPushButton("⚡ Encender seleccionados")
+        wol_selected = QPushButton("Encender seleccionados")
+        wol_selected.setProperty("class", "warning")
+        wol_selected.setIcon(icon_energy)
+        wol_selected.setCursor(Qt.CursorShape.PointingHandCursor)
         wol_selected.clicked.connect(self._on_wol_selected_clicked)
         wol_row.addWidget(wol_selected)
-        wol_all = QPushButton("⚡ Encender Todos")
+        wol_all = QPushButton("Encender Todos")
+        wol_all.setProperty("class", "success")
+        wol_all.setIcon(icon_energy_all)
+        wol_all.setCursor(Qt.CursorShape.PointingHandCursor)
         wol_all.clicked.connect(self._on_wol_all_clicked)
         wol_row.addWidget(wol_all)
         layout.addLayout(wol_row)
@@ -222,6 +256,7 @@ class PowerDialog(QDialog):
         self._manual_mac_edit.setPlaceholderText("AA:BB:CC:DD:EE:FF")
         manual_row.addWidget(self._manual_mac_edit)
         manual_btn = QPushButton("⚡ Enviar WoL")
+        manual_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         manual_btn.clicked.connect(self._on_wol_manual_clicked)
         manual_row.addWidget(manual_btn)
         layout.addLayout(manual_row)
