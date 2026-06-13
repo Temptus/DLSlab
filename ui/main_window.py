@@ -28,7 +28,7 @@ import threading
 from typing import Optional
 
 from PyQt6.QtCore import QTimer, Qt, pyqtSlot
-from PyQt6.QtGui import QAction, QFont
+from PyQt6.QtGui import QAction, QFont, QIcon
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -48,7 +48,7 @@ from PyQt6.QtWidgets import (
     QStatusBar,
     QToolBar,
     QVBoxLayout,
-    QWidget,
+    QWidget, QStyle,
 )
 
 from server.main_server import DLSlabServer
@@ -109,7 +109,8 @@ class MainWindow(QMainWindow):
         """Build the main window UI."""
         self.setWindowTitle(WINDOW_TITLE)
         self.resize(WINDOW_WIDTH, WINDOW_HEIGHT)
-        # self.setStyleSheet("background-color: white;")
+        # window_icon = self.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)
+        self.setWindowIcon(QIcon("../icon.png"))
 
         # ---- Menu bar ----
         menu_bar = self.menuBar()
@@ -954,9 +955,16 @@ def main() -> None:
         # Font
         'font_family': 'Roboto',
     }
-    apply_stylesheet(app, theme='light_red.xml', invert_secondary=True, extra=extra)
+    apply_stylesheet(app, theme='dark_red.xml', invert_secondary=False, extra=extra)
     app.setApplicationName("DLSlab")
+
+    from ui.splash_screen import create_splash
+    splash = create_splash()
+    splash.show()
+    app.processEvents()
+
     window = MainWindow()
+    splash.finish(window)
     window.show()
     sys.exit(app.exec())
 

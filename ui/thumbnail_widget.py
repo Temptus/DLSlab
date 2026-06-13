@@ -26,6 +26,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+import qtawesome as qta
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -225,12 +227,14 @@ class ThumbnailWidget(QWidget):
         )
         self._power_overlay.hide()
 
-        self._wol_button = QPushButton("⚡ WoL", self._image_label)
+        self._wol_button = QPushButton("WoL", self._image_label)
         self._wol_button.setGeometry(THUMBNAIL_WIDTH - 76, THUMBNAIL_HEIGHT - 34, 72, 28)
         self._wol_button.setStyleSheet(
             "QPushButton { background-color: #ffb300; color: black; font-weight: bold; border-radius: 4px; }"
             "QPushButton:hover { background-color: #ffc947; }"
         )
+        self._wol_button.setIcon(qta.icon('fa6s.plug', color='#f44336'))
+
         self._wol_button.clicked.connect(lambda: self.wol_requested.emit(self.client_id))
         self._wol_button.hide()
 
@@ -451,21 +455,21 @@ class ThumbnailWidget(QWidget):
         if state == "shutting_down":
             self._power_overlay.setText("⏳ Apagando...")
             self._power_overlay.setStyleSheet(
-                f"background-color: {POWER_SHUTTING_DOWN_OVERLAY_COLOR}; color: white;"
+                f"background-color: {POWER_SHUTTING_DOWN_OVERLAY_COLOR}; color: white; font-size: 20px;"
             )
             self._power_overlay.show()
             self._power_overlay.raise_()
         elif state == "restarting":
             self._power_overlay.setText("🔄 Reiniciando...")
             self._power_overlay.setStyleSheet(
-                f"background-color: {POWER_RESTARTING_OVERLAY_COLOR}; color: white;"
+                f"background-color: {POWER_RESTARTING_OVERLAY_COLOR}; color: white; font-size: 20px;"
             )
             self._power_overlay.show()
             self._power_overlay.raise_()
         elif state == "offline":
             self._power_overlay.setText("💤 APAGADO")
             self._power_overlay.setStyleSheet(
-                f"background-color: {POWER_OFFLINE_OVERLAY_COLOR}; color: #e0e0e0;"
+                f"background-color: {POWER_OFFLINE_OVERLAY_COLOR}; color: #e0e0e0; font-size: 20px;"
             )
             self._power_overlay.show()
             self._power_overlay.raise_()
@@ -489,11 +493,12 @@ class ThumbnailWidget(QWidget):
                     border: 1px solid #ccc;
                 }
                 QMenu::item {
-                    padding: 8px 12px;
+                    font-size: 12px;
                 }
                 QMenu::item:selected {
-                    background-color: #0078d7;   /* azul Windows 11 */
+                    background-color: #0078d7;   
                     color: white;
+                    font-size: 12px;
                 }
             """)
         action = menu.exec(event.globalPos())

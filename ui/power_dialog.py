@@ -11,6 +11,7 @@ from collections.abc import Callable
 from typing import Optional
 
 from PyQt6.QtCore import Qt, pyqtSlot
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (
     QDialog,
     QFileDialog,
@@ -82,6 +83,7 @@ class PowerDialog(QDialog):
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
+        self.setWindowIcon(QIcon("../icon.png"))
 
         layout.addWidget(self._build_power_section())
         layout.addWidget(self._build_remote_exec_section())

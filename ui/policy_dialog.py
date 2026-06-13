@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PyQt6.QtCore import pyqtSlot
+from PyQt6.QtCore import pyqtSlot, Qt
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -23,6 +24,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+import qtawesome as qta
 
 COMMON_APP_SHORTCUTS: dict[str, str] = {
     "Chrome": "chrome.exe",
@@ -57,14 +59,23 @@ class PolicyDialog(QDialog):
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
+        self.setWindowIcon(QIcon("../icon.png"))
+
+        # Icons
+        icon_tab_0 = qta.icon('fa6s.desktop', color='#f44336')
+        icon_tab_1 = qta.icon('fa6s.globe', color='#f44336')
 
         tabs = QTabWidget()
-        tabs.addTab(self._build_app_tab(), "🖥️ Aplicaciones")
-        tabs.addTab(self._build_web_tab(), "🌐 Web")
+        tabs.addTab(self._build_app_tab(), "Aplicaciones")
+        tabs.addTab(self._build_web_tab(), "Web")
+        tabs.setTabIcon(0, icon_tab_0)
+        tabs.setTabIcon(1, icon_tab_1)
+        tabs.setCursor(Qt.CursorShape.PointingHandCursor)
         layout.addWidget(tabs)
 
         button_row = QHBoxLayout()
         self._clear_button = QPushButton("Limpiar Todo")
+        self._clear_button.setProperty("class", "warning")
         self._clear_button.clicked.connect(self._on_clear_all_clicked)
         button_row.addWidget(self._clear_button)
         button_row.addStretch()
@@ -73,6 +84,7 @@ class PolicyDialog(QDialog):
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
         buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Aplicar")
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setProperty("class", "success")
         buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("Cancelar")
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
@@ -84,10 +96,18 @@ class PolicyDialog(QDialog):
         layout = QVBoxLayout(widget)
         layout.addWidget(QLabel("Modo de política de aplicaciones:"))
 
-        self._app_none_radio = QRadioButton("⚪ Sin restricciones")
+        # icons
+        icon_no_restrictions = qta.icon('fa6s.circle', color='#4CAF50')
+        icon_white_list = qta.icon('fa6s.circle', color='#FF9800')
+        icon_black_list = qta.icon('fa6s.circle', color='#f44336')
+
+        self._app_none_radio = QRadioButton("Sin restricciones")
         self._app_none_radio.setChecked(True)
-        self._app_whitelist_radio = QRadioButton("🟢 Lista Blanca (solo permitidas)")
-        self._app_blacklist_radio = QRadioButton("🔴 Lista Negra (prohibidas)")
+        self._app_none_radio.setIcon(icon_no_restrictions)
+        self._app_whitelist_radio = QRadioButton("Lista Blanca (solo permitidas)")
+        self._app_whitelist_radio.setIcon(icon_white_list)
+        self._app_blacklist_radio = QRadioButton("Lista Negra (prohibidas)")
+        self._app_blacklist_radio.setIcon(icon_black_list)
         layout.addWidget(self._app_none_radio)
         layout.addWidget(self._app_whitelist_radio)
         layout.addWidget(self._app_blacklist_radio)
@@ -126,10 +146,18 @@ class PolicyDialog(QDialog):
         layout = QVBoxLayout(widget)
         layout.addWidget(QLabel("Modo de política web:"))
 
-        self._web_none_radio = QRadioButton("⚪ Sin restricciones")
+        # Icons
+        icon_no_restrictions = qta.icon('fa6s.circle', color='#4CAF50')
+        icon_web_block = qta.icon('fa6s.ban', color='#f44336')
+        icon_white_list = qta.icon('fa6s.check', color='#FF9800')
+
+        self._web_none_radio = QRadioButton("Sin restricciones")
         self._web_none_radio.setChecked(True)
-        self._web_block_all_radio = QRadioButton("🚫 Bloquear toda navegación")
-        self._web_whitelist_radio = QRadioButton("✅ Solo URLs permitidas")
+        self._web_none_radio.setIcon(icon_no_restrictions)
+        self._web_block_all_radio = QRadioButton("Bloquear toda navegación")
+        self._web_block_all_radio.setIcon(icon_web_block)
+        self._web_whitelist_radio = QRadioButton("Solo URLs permitidas")
+        self._web_whitelist_radio.setIcon(icon_white_list)
         layout.addWidget(self._web_none_radio)
         layout.addWidget(self._web_block_all_radio)
         layout.addWidget(self._web_whitelist_radio)
