@@ -27,7 +27,7 @@ import sys
 import threading
 from typing import Optional
 
-from PyQt6.QtCore import QTimer, Qt, pyqtSlot
+from PyQt6.QtCore import QSettings, QTimer, Qt, pyqtSlot
 from PyQt6.QtGui import QAction, QFont, QIcon
 from PyQt6.QtWidgets import (
     QApplication,
@@ -115,6 +115,14 @@ class MainWindow(QMainWindow):
         # ---- Menu bar ----
         menu_bar = self.menuBar()
         file_menu = menu_bar.addMenu("Archivo")
+        theme_menu = file_menu.addMenu("Tema")
+        light_action = QAction("Claro", self)
+        light_action.triggered.connect(self._apply_theme_light)
+        theme_menu.addAction(light_action)
+        dark_action = QAction("Oscuro", self)
+        dark_action.triggered.connect(self._apply_theme_dark)
+        theme_menu.addAction(dark_action)
+        file_menu.addSeparator()
         quit_action = QAction("Salir", self)
         quit_action.setShortcut("Ctrl+Q")
         quit_action.triggered.connect(self.close)
@@ -922,6 +930,35 @@ class MainWindow(QMainWindow):
         super().closeEvent(event)
 
     # ------------------------------------------------------------------
+    # Theme control
+    # ------------------------------------------------------------------
+
+    def _get_extra(self) -> dict:
+        """Return the shared qt-material extra configuration dict."""
+        return {
+            'danger': '#dc3545',
+            'warning': '#ffc107',
+            'success': '#4caf50',
+            'info': '#17a2b8',
+            'density_scale': '-2',
+            'font_family': 'Roboto',
+        }
+
+    @pyqtSlot()
+    def _apply_theme_light(self) -> None:
+        """Switch the application theme to light_red."""
+        app = QApplication.instance()
+        apply_stylesheet(app, theme='light_red.xml', invert_secondary=True, extra=self._get_extra())
+        QSettings("DLSlab", "TeacherConsole").setValue("theme", "light")
+
+    @pyqtSlot()
+    def _apply_theme_dark(self) -> None:
+        """Switch the application theme to dark_red."""
+        app = QApplication.instance()
+        apply_stylesheet(app, theme='dark_red.xml', invert_secondary=False, extra=self._get_extra())
+        QSettings("DLSlab", "TeacherConsole").setValue("theme", "dark")
+
+    # ------------------------------------------------------------------
     # About Dialog
     # ------------------------------------------------------------------
 
@@ -955,7 +992,14 @@ def main() -> None:
         # Font
         'font_family': 'Roboto',
     }
-    apply_stylesheet(app, theme='dark_red.xml', invert_secondary=False, extra=extra)
+
+    # Restaurar el último tema seleccionado por el usuario (por defecto: dark)
+    saved_theme = QSettings("DLSlab", "TeacherConsole").value("theme", "dark")
+    if saved_theme == "light":
+        apply_stylesheet(app, theme='light_red.xml', invert_secondary=True, extra=extra)
+    else:
+        apply_stylesheet(app, theme='dark_red.xml', invert_secondary=False, extra=extra)
+
     app.setApplicationName("DLSlab")
 
     from ui.splash_screen import create_splash
