@@ -78,6 +78,7 @@ class PowerDialog(QDialog):
 
         self.setWindowTitle("⚡ Control de Energía")
         self.setMinimumWidth(720)
+        self.setMinimumHeight(900)
         self._setup_ui()
 
     def _setup_ui(self) -> None:

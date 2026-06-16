@@ -27,8 +27,8 @@ import sys
 import threading
 from typing import Optional
 
-from PyQt6.QtCore import QSettings, QTimer, Qt, pyqtSlot
-from PyQt6.QtGui import QAction, QFont, QIcon
+from PyQt6.QtCore import QSettings, QTimer, Qt, pyqtSlot, QUrl
+from PyQt6.QtGui import QAction, QFont, QIcon, QDesktopServices
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -117,9 +117,11 @@ class MainWindow(QMainWindow):
         file_menu = menu_bar.addMenu("Archivo")
         theme_menu = file_menu.addMenu("Tema")
         light_action = QAction("Claro", self)
+        light_action.setShortcut("Ctrl+C")
         light_action.triggered.connect(self._apply_theme_light)
         theme_menu.addAction(light_action)
         dark_action = QAction("Oscuro", self)
+        dark_action.setShortcut("Ctrl+O")
         dark_action.triggered.connect(self._apply_theme_dark)
         theme_menu.addAction(dark_action)
         file_menu.addSeparator()
@@ -130,6 +132,7 @@ class MainWindow(QMainWindow):
         help_menu = menu_bar.addMenu("Ayuda")
         help_action = QAction("Ayuda", self)
         help_action.setShortcut("Ctrl+H")
+        help_action.triggered.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.python.org")))
         help_menu.addAction(help_action)
         help_menu.addSeparator()
         about_action = QAction("Acerca de...", self)
