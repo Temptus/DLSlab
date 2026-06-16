@@ -11,6 +11,7 @@ from typing import Optional
 from PyQt6.QtCore import pyqtSlot, Qt
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (
+    QButtonGroup,
     QDialog,
     QDialogButtonBox,
     QHBoxLayout,
@@ -112,6 +113,11 @@ class PolicyDialog(QDialog):
         layout.addWidget(self._app_whitelist_radio)
         layout.addWidget(self._app_blacklist_radio)
 
+        self._app_mode_group = QButtonGroup(widget)
+        self._app_mode_group.addButton(self._app_none_radio)
+        self._app_mode_group.addButton(self._app_whitelist_radio)
+        self._app_mode_group.addButton(self._app_blacklist_radio)
+
         layout.addWidget(QLabel("Procesos (uno por línea):"))
         self._app_text = QTextEdit()
         self._app_text.setPlaceholderText("notepad.exe\nchrome.exe")
@@ -132,6 +138,10 @@ class PolicyDialog(QDialog):
         self._app_all_radio.toggled.connect(self._toggle_app_client_list)
         layout.addWidget(self._app_all_radio)
         layout.addWidget(self._app_selected_radio)
+
+        self._app_target_group = QButtonGroup(widget)
+        self._app_target_group.addButton(self._app_all_radio)
+        self._app_target_group.addButton(self._app_selected_radio)
 
         self._app_client_list = QListWidget()
         self._app_client_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
@@ -162,6 +172,11 @@ class PolicyDialog(QDialog):
         layout.addWidget(self._web_block_all_radio)
         layout.addWidget(self._web_whitelist_radio)
 
+        self._web_mode_group = QButtonGroup(widget)
+        self._web_mode_group.addButton(self._web_none_radio)
+        self._web_mode_group.addButton(self._web_block_all_radio)
+        self._web_mode_group.addButton(self._web_whitelist_radio)
+
         layout.addWidget(QLabel("URLs permitidas (una por línea):"))
         self._web_text = QTextEdit()
         self._web_text.setPlaceholderText("https://ejemplo.com\nhttps://campus.universidad.edu")
@@ -182,6 +197,10 @@ class PolicyDialog(QDialog):
         self._web_all_radio.toggled.connect(self._toggle_web_client_list)
         layout.addWidget(self._web_all_radio)
         layout.addWidget(self._web_selected_radio)
+
+        self._web_target_group = QButtonGroup(widget)
+        self._web_target_group.addButton(self._web_all_radio)
+        self._web_target_group.addButton(self._web_selected_radio)
 
         self._web_client_list = QListWidget()
         self._web_client_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
