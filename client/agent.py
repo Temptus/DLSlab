@@ -30,7 +30,6 @@ import asyncio
 import logging
 import socket
 import sys
-import uuid
 from typing import Optional
 
 from PyQt6.QtCore import QObject, pyqtSignal
@@ -625,14 +624,26 @@ class DLSlabAgent:
 
     @staticmethod
     def _generate_client_id() -> str:
-        """Generate a unique client ID based on hostname + UUID.
+        """Generate a stable client ID based on hostname + MAC address.
+
+        The ID is derived from the machine's MAC address so it remains
+        consistent across agent and server restarts, preventing duplicate
+        thumbnails in the teacher console.
 
         Returns:
-            A string in the form ``"<hostname>-<short-uuid>"``.
+            A string in the form ``"<hostname>-<last6hex_of_MAC>"``.
+            Falls back to a hostname-based MD5 suffix if no MAC is available.
         """
+        import hashlib
         host = socket.gethostname()
-        short_uuid = str(uuid.uuid4())[:8]
-        return f"{host}-{short_uuid}"
+        mac = PowerManager.get_mac_address()
+        if mac:
+            # Use the last 6 hex chars of the MAC (e.g. "AA:BB:CC:DD:EE:FF" → "DDEEFF")
+            suffix = mac.replace(":", "").replace("-", "")[-6:].upper()
+        else:
+            # Stable fallback: deterministic hash of the hostname
+            suffix = hashlib.md5(host.encode()).hexdigest()[:6].upper()
+        return f"{host}-{suffix}"
 
     @staticmethod
     def _get_local_ip() -> str:

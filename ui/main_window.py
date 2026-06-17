@@ -65,7 +65,7 @@ logger = logging.getLogger(__name__)
 # Configuration constants
 # ---------------------------------------------------------------------------
 
-WINDOW_TITLE: str = "DLSlab — Teacher Console"
+WINDOW_TITLE: str = "DLSlab — Consola del Profesor"
 WINDOW_WIDTH: int = 1280
 WINDOW_HEIGHT: int = 720
 GRID_COLUMNS: int = 4           # number of thumbnails per row
