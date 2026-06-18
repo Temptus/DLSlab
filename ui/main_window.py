@@ -52,6 +52,7 @@ from PyQt6.QtWidgets import (
 )
 
 from server.main_server import DLSlabServer
+from ui.log_window import PolicyLogWindow
 from ui.policy_dialog import PolicyDialog
 from ui.power_dialog import PowerDialog
 from ui.thumbnail_widget import ThumbnailWidget
@@ -96,6 +97,8 @@ class MainWindow(QMainWindow):
         self._server: Optional[DLSlabServer] = None
         self._server_thread: Optional[threading.Thread] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
+
+        self._log_window: PolicyLogWindow = PolicyLogWindow()
 
         self._setup_ui()
         self._start_server()
@@ -165,6 +168,7 @@ class MainWindow(QMainWindow):
         icon_policies = qta.icon('fa6s.building-shield', color='#ba0c2f')
         icon_energy = qta.icon('fa6s.bolt', color='#ba0c2f')
         icon_power_off = qta.icon('fa6s.power-off', color='#ba0c2f')
+        icon_log = qta.icon('fa6s.clipboard-list', color='#ba0c2f')
 
         self._lock_action = QAction("", self)
         self._lock_action.setIcon(icon_lock)
@@ -265,6 +269,23 @@ class MainWindow(QMainWindow):
         action_widget = toolbar.widgetForAction(self._emergency_shutdown_action)
         if action_widget is not None:
             action_widget.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        toolbar.addSeparator()
+
+        self._log_action = QAction("", self)
+        self._log_action.setIcon(icon_log)
+        self._log_action.setToolTip("Ver log de violaciones de política")
+        self._log_action.triggered.connect(self._open_log_window)
+        toolbar.addAction(self._log_action)
+        action_widget = toolbar.widgetForAction(self._log_action)
+        if action_widget is not None:
+            action_widget.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        # Badge label shown next to log button when there are unread events
+        self._log_badge = QLabel()
+        self._log_badge.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        self._log_badge.hide()
+        toolbar.addWidget(self._log_badge)
 
         # ---- Central widget ----
         central = QWidget()
@@ -678,7 +699,7 @@ class MainWindow(QMainWindow):
             self._pending_policy_violations.append((client_id, process_name, mode))
 
     def _process_policy_violations(self) -> None:
-        """Show pending policy-violation notifications on the UI thread."""
+        """Feed pending policy-violation events into the log window."""
         with self._lock:
             pending = list(self._pending_policy_violations)
             self._pending_policy_violations.clear()
@@ -689,11 +710,24 @@ class MainWindow(QMainWindow):
                 info = self._server.clients.get(client_id)
                 if info:
                     hostname = info.hostname
-            QMessageBox.warning(
-                self,
-                "Violación de política",
-                f"⚠️ {hostname} intentó abrir {process_name}\nModo: {mode}",
-            )
+            self._log_window.add_violation(hostname, process_name, mode)
+
+        # Update badge on the toolbar
+        unread = self._log_window.unread_count
+        if unread > 0:
+            self._log_badge.setText(f"🔴 {unread}")
+            self._log_badge.show()
+        else:
+            self._log_badge.hide()
+
+    @pyqtSlot()
+    def _open_log_window(self) -> None:
+        """Show (or bring to front) the policy log window."""
+        self._log_window.show()
+        self._log_window.raise_()
+        self._log_window.activateWindow()
+        self._log_window.reset_unread()
+        self._log_badge.hide()
 
     # ------------------------------------------------------------------
     # Power control
