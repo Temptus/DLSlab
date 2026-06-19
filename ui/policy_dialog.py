@@ -133,7 +133,7 @@ class PolicyDialog(QDialog):
 
         layout.addWidget(QLabel("Aplicar a:"))
         self._app_all_radio = QRadioButton("Todos")
-        self._app_all_radio.setChecked(False)
+        self._app_all_radio.setChecked(True)
         self._app_selected_radio = QRadioButton("Selección múltiple")
         self._app_all_radio.toggled.connect(self._toggle_app_client_list)
         layout.addWidget(self._app_all_radio)

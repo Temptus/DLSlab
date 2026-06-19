@@ -37,9 +37,10 @@ COL_PROCESS = 2
 COL_MODE = 3
 
 _MODE_LABELS: dict[str, str] = {
-    "whitelist": "Lista Blanca",
-    "blacklist": "Lista Negra",
-    "block_all": "Bloqueo Web",
+    "whitelist":     "Lista Blanca (Apps)",
+    "blacklist":     "Lista Negra (Apps)",
+    "block_all":     "Bloqueo Web Total",
+    "web_whitelist": "Lista Blanca (Web)",
 }
 
 
@@ -98,8 +99,12 @@ class PolicyLogWindow(QMainWindow):
                     item.setForeground(Qt.GlobalColor.yellow)
                 elif mode == "blacklist":
                     item.setForeground(Qt.GlobalColor.red)
-                else:
+                elif mode == "web_whitelist":
                     item.setForeground(Qt.GlobalColor.cyan)
+                elif mode == "block_all":
+                    item.setForeground(Qt.GlobalColor.magenta)
+                else:
+                    item.setForeground(Qt.GlobalColor.white)
             self._table.setItem(row, col, item)
 
         # Auto-scroll to newest row

@@ -28,6 +28,7 @@ from PyQt6.QtWidgets import (
 
 import qtawesome as qta
 
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -132,12 +133,8 @@ class ThumbnailWidget(QWidget):
         self._teacher_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._teacher_overlay.setStyleSheet(
             f"background-color: {TEACHER_OVERLAY_COLOR}; color: white;"
-            " border-radius: 4px; padding: 2px 6px;"
+            " border-radius: 4px; padding: 2px 6px; font-size: 14px;"
         )
-        teacher_font = QFont()
-        teacher_font.setPointSize(9)
-        teacher_font.setBold(True)
-        self._teacher_overlay.setFont(teacher_font)
         self._teacher_overlay.setText(TEACHER_ICON)
         self._teacher_overlay.adjustSize()
         # Place in top-right corner with a small margin
@@ -156,12 +153,8 @@ class ThumbnailWidget(QWidget):
         self._presenting_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._presenting_overlay.setStyleSheet(
             f"background-color: {PRESENTING_OVERLAY_COLOR}; color: white;"
-            " border-radius: 4px; padding: 2px 6px;"
+            " border-radius: 4px; padding: 2px 6px; font-size: 14px;"
         )
-        presenting_font = QFont()
-        presenting_font.setPointSize(9)
-        presenting_font.setBold(True)
-        self._presenting_overlay.setFont(presenting_font)
         self._presenting_overlay.setText(PRESENTING_ICON)
         self._presenting_overlay.adjustSize()
         self._presenting_overlay.move(4, 4)
@@ -172,12 +165,8 @@ class ThumbnailWidget(QWidget):
         self._watching_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._watching_overlay.setStyleSheet(
             f"background-color: {WATCHING_OVERLAY_COLOR}; color: white;"
-            " border-radius: 4px; padding: 2px 6px;"
+            " border-radius: 4px; padding: 2px 6px; font-size: 14px;"
         )
-        watching_font = QFont()
-        watching_font.setPointSize(9)
-        watching_font.setBold(True)
-        self._watching_overlay.setFont(watching_font)
         self._watching_overlay.setText(WATCHING_ICON)
         self._watching_overlay.adjustSize()
         watching_w = self._watching_overlay.width()
@@ -195,24 +184,16 @@ class ThumbnailWidget(QWidget):
         self._app_policy_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._app_policy_overlay.setStyleSheet(
             "background-color: rgba(20, 20, 20, 180); color: white;"
-            " border-radius: 4px; padding: 2px 6px;"
+            " border-radius: 4px; padding: 2px 6px; font-size: 14px;"
         )
-        app_font = QFont()
-        app_font.setPointSize(8)
-        app_font.setBold(True)
-        self._app_policy_overlay.setFont(app_font)
         self._app_policy_overlay.hide()
 
         self._web_policy_overlay = QLabel(self._image_label)
         self._web_policy_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._web_policy_overlay.setStyleSheet(
             "background-color: rgba(20, 20, 20, 180); color: white;"
-            " border-radius: 4px; padding: 2px 6px;"
+            " border-radius: 4px; padding: 2px 6px; font-size: 14px;"
         )
-        web_font = QFont()
-        web_font.setPointSize(8)
-        web_font.setBold(True)
-        self._web_policy_overlay.setFont(web_font)
         self._web_policy_overlay.hide()
 
         self._power_overlay = QLabel(self._image_label)
