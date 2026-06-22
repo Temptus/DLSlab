@@ -449,6 +449,10 @@ class MainWindow(QMainWindow):
             widget = ThumbnailWidget(client_id=client_id, hostname=hostname)
             widget.present_requested.connect(self._on_present_requested)
             widget.wol_requested.connect(self._wake_single_client)
+            widget.lock_requested.connect(
+                lambda cid: self._send_blank_screen([cid], BlankScreenDialog._DEFAULT_MESSAGE)
+            )
+            widget.unblock_requested.connect(self._send_unblank_single)
             self._thumbnails[client_id] = widget
             widget.set_policy_active(
                 self._app_policy_state.get(client_id),
@@ -522,6 +526,19 @@ class MainWindow(QMainWindow):
                 widget.set_blocked(False)
         self._blocked_clients.clear()
         logger.info("Unblank-screen sent to all clients.")
+
+    def _send_unblank_single(self, client_id: str) -> None:
+        """Send UNBLANK_SCREEN to a single client and restore its thumbnail."""
+        if self._server and self._loop:
+            asyncio.run_coroutine_threadsafe(
+                self._server.unblank_screen([client_id]),
+                self._loop,
+            )
+        self._blocked_clients.discard(client_id)
+        widget = self._thumbnails.get(client_id)
+        if widget:
+            widget.set_blocked(False)
+        logger.info("Unblank-screen sent to client %r.", client_id)
 
     # ------------------------------------------------------------------
     # Show-teacher control

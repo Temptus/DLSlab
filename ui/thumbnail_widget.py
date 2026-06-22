@@ -72,6 +72,8 @@ class ThumbnailWidget(QWidget):
     #: student's screen to the rest of the class.
     present_requested = pyqtSignal(str)  # str = client_id
     wol_requested = pyqtSignal(str)  # str = client_id
+    lock_requested = pyqtSignal(str)  # str = client_id
+    unblock_requested = pyqtSignal(str)  # str = client_id
 
     def __init__(
         self,
@@ -465,27 +467,24 @@ class ThumbnailWidget(QWidget):
         Args:
             event: The Qt context-menu event triggered by a right-click.
         """
+        if not self._connected:
+            return
         menu = QMenu(self)
         present_action = menu.addAction("📺 Presentar al resto ")
-        block_action = menu.addAction("🔒 Bloquear")
-        menu.setStyleSheet("""
-                QMenu {
-                    background-color: #f0f0f0;
-                    border: 1px solid #ccc;
-                }
-                QMenu::item {
-                    font-size: 12px;
-                }
-                QMenu::item:selected {
-                    background-color: #0078d7;   
-                    color: white;
-                    font-size: 12px;
-                }
-            """)
+        if self._blocked:
+            toggle_action = menu.addAction("🔓 Desbloquear")
+        else:
+            toggle_action = menu.addAction("🔒 Bloquear")
+        menu.setStyleSheet('QMenu::item {font-size: 16px; padding: 4px 10px;}')
         action = menu.exec(event.globalPos())
 
         if action == present_action:
             self.present_requested.emit(self.client_id)
+        elif action == toggle_action:
+            if self._blocked:
+                self.unblock_requested.emit(self.client_id)
+            else:
+                self.lock_requested.emit(self.client_id)
 
 
 # ---------------------------------------------------------------------------
