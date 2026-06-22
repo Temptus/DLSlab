@@ -74,6 +74,7 @@ class ThumbnailWidget(QWidget):
     wol_requested = pyqtSignal(str)  # str = client_id
     lock_requested = pyqtSignal(str)  # str = client_id
     unblock_requested = pyqtSignal(str)  # str = client_id
+    send_file_requested = pyqtSignal(str)  # str = client_id
 
     def __init__(
         self,
@@ -475,6 +476,7 @@ class ThumbnailWidget(QWidget):
             toggle_action = menu.addAction("🔓 Desbloquear")
         else:
             toggle_action = menu.addAction("🔒 Bloquear")
+        send_file_action = menu.addAction("📄 Enviar Archivo")
         menu.setStyleSheet('QMenu::item {font-size: 16px; padding: 4px 10px;}')
         action = menu.exec(event.globalPos())
 
@@ -485,6 +487,8 @@ class ThumbnailWidget(QWidget):
                 self.unblock_requested.emit(self.client_id)
             else:
                 self.lock_requested.emit(self.client_id)
+        elif action == send_file_action:
+            self.send_file_requested.emit(self.client_id)
 
 
 # ---------------------------------------------------------------------------

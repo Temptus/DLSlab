@@ -1,5 +1,5 @@
 """
-client/agent.py Yan
+client/agent.py Yan2
 ===============
 DLSlab student agent — runs on each Windows PC in the lab.
 
@@ -27,7 +27,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
 import logging
+import pathlib
 import socket
 import sys
 from typing import Optional
@@ -211,7 +213,7 @@ class DLSlabAgent:
         )
         reader, writer = await asyncio.open_connection(
             self.server_host, self.server_port,
-            limit=10 * 1024 * 1024 # 10 MB — igual a MAX_MESSAGE_BYTES
+            limit=50 * 1024 * 1024  # 50 MB — matches MAX_MESSAGE_BYTES
         )
         self._writer = writer
         logger.info("Connected.")
@@ -366,6 +368,9 @@ class DLSlabAgent:
 
         elif message.type == MessageType.RUN_APP:
             self._handle_run_app(message)
+
+        elif message.type == MessageType.SEND_FILE:
+            self._handle_send_file(message)
 
         else:
             logger.debug("Ignored message type: %s", message.type)
@@ -575,6 +580,42 @@ class DLSlabAgent:
             return
         PowerManager.run_app(path, args=args)
         logger.info("RUN_APP executed: %s %s", path, args)
+
+    def _handle_send_file(self, message: Message) -> None:
+        """Receive a file from the server and save it to the Windows Desktop.
+
+        Args:
+            message: A SEND_FILE message containing ``filename`` and base64
+                     ``data`` fields in the payload.
+        """
+        filename: str = message.payload.get("filename", "documento")
+        data_b64: str = message.payload.get("data", "")
+        if not data_b64:
+            logger.warning("SEND_FILE received with empty data — ignored.")
+            return
+
+        # Sanitize: strip any directory components to prevent path traversal.
+        safe_name = pathlib.Path(filename).name or "documento"
+
+        # Resolve the Windows Desktop path, honouring OneDrive redirection.
+        try:
+            import winreg
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders",
+            ) as key:
+                desktop = pathlib.Path(winreg.QueryValueEx(key, "Desktop")[0])
+        except Exception:
+            desktop = pathlib.Path.home() / "Desktop"
+
+        try:
+            desktop.mkdir(parents=True, exist_ok=True)
+            dest = desktop / safe_name
+            data = base64.b64decode(data_b64)
+            dest.write_bytes(data)
+            logger.info("SEND_FILE saved — %s (%d bytes)", dest, len(data))
+        except Exception as exc:
+            logger.error("SEND_FILE failed to save %r: %s", safe_name, exc)
 
     @staticmethod
     def _parse_power_delay(value: object) -> int:

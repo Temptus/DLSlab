@@ -22,7 +22,9 @@ Usage::
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
+import pathlib
 import sys
 import threading
 from typing import Optional
@@ -34,6 +36,7 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -272,6 +275,18 @@ class MainWindow(QMainWindow):
 
         toolbar.addSeparator()
 
+        icon_send_file = qta.icon('fa6s.file-export', color='#ba0c2f')
+        self._send_file_action = QAction("", self)
+        self._send_file_action.setIcon(icon_send_file)
+        self._send_file_action.setToolTip("Enviar documento al Escritorio de los alumnos")
+        self._send_file_action.triggered.connect(self._open_send_file_dialog)
+        toolbar.addAction(self._send_file_action)
+        action_widget = toolbar.widgetForAction(self._send_file_action)
+        if action_widget is not None:
+            action_widget.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        toolbar.addSeparator()
+
         self._log_action = QAction("", self)
         self._log_action.setIcon(icon_log)
         self._log_action.setToolTip("Ver log de violaciones de política")
@@ -453,6 +468,7 @@ class MainWindow(QMainWindow):
                 lambda cid: self._send_blank_screen([cid], BlankScreenDialog._DEFAULT_MESSAGE)
             )
             widget.unblock_requested.connect(self._send_unblank_single)
+            widget.send_file_requested.connect(self._on_send_file_requested)
             self._thumbnails[client_id] = widget
             widget.set_policy_active(
                 self._app_policy_state.get(client_id),
@@ -833,6 +849,136 @@ class MainWindow(QMainWindow):
                 self._server.run_app(client_ids, path, args),
                 self._loop,
             )
+
+    @pyqtSlot()
+    def _open_send_file_dialog(self) -> None:
+        """Open the send-file workflow: pick a file then choose target students."""
+        if not self._server:
+            return
+        connected_ids = [info.client_id for info in self._server.clients.all_clients()]
+        if not connected_ids:
+            QMessageBox.warning(
+                self,
+                "Sin clientes",
+                "No hay alumnos conectados.",
+            )
+            return
+
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Seleccionar documento para enviar",
+            "",
+            "Documentos (*.pdf *.docx *.doc *.xlsx *.xls *.pptx *.ppt "
+            "*.png *.jpg *.jpeg *.bmp *.gif);;Todos los archivos (*.*)",
+        )
+        if not path:
+            return
+
+        file_path = pathlib.Path(path)
+        file_size = file_path.stat().st_size
+        MAX_FILE_BYTES = 35 * 1024 * 1024  # 35 MB — base64 ≈ 47 MB < 50 MB limit
+        if file_size > MAX_FILE_BYTES:
+            QMessageBox.warning(
+                self,
+                "Archivo demasiado grande",
+                f"El archivo supera el límite de 35 MB "
+                f"({file_size / 1024 / 1024:.1f} MB).\n"
+                "Por favor, comprime el archivo antes de enviarlo.",
+            )
+            return
+
+        data_b64 = base64.b64encode(file_path.read_bytes()).decode("ascii")
+        filename = file_path.name
+
+        dialog = SendFileDialog(connected_ids, filename, parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        target_ids = dialog.get_selected_client_ids()
+        if not target_ids:
+            QMessageBox.warning(
+                self,
+                "Sin clientes",
+                "Ningún alumno fue seleccionado.",
+            )
+            return
+
+        self._send_file_to_clients(target_ids, filename, data_b64)
+        QMessageBox.information(
+            self,
+            "Documento enviado",
+            f"'{filename}' fue enviado a {len(target_ids)} estación(es).\n"
+            "El archivo quedará guardado en el Escritorio de cada alumno.",
+        )
+
+    def _send_file_to_clients(
+        self, client_ids: list[str], filename: str, data_b64: str
+    ) -> None:
+        """Dispatch SEND_FILE to the given clients.
+
+        Args:
+            client_ids: Client identifiers to send the file to.
+            filename:   Original filename.
+            data_b64:   Base64-encoded file contents.
+        """
+        if self._server and self._loop:
+            asyncio.run_coroutine_threadsafe(
+                self._server.send_file(client_ids, filename, data_b64),
+                self._loop,
+            )
+        logger.info(
+            "send_file dispatched — %r to %d client(s)", filename, len(client_ids)
+        )
+
+    @pyqtSlot(str)
+    def _on_send_file_requested(self, client_id: str) -> None:
+        """Slot called from a thumbnail context menu — send a file to one student.
+
+        Opens a file picker directly; no student-selection dialog is shown
+        because the target is already determined by which thumbnail was clicked.
+
+        Args:
+            client_id: The client identifier of the target student.
+        """
+        hostname = client_id
+        if self._server:
+            info = self._server.clients.get(client_id)
+            if info:
+                hostname = info.hostname
+
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            f"Enviar documento a {hostname}",
+            "",
+            "Documentos (*.pdf *.docx *.doc *.xlsx *.xls *.pptx *.ppt "
+            "*.png *.jpg *.jpeg *.bmp *.gif);;Todos los archivos (*.*)",
+        )
+        if not path:
+            return
+
+        file_path = pathlib.Path(path)
+        file_size = file_path.stat().st_size
+        MAX_FILE_BYTES = 35 * 1024 * 1024
+        if file_size > MAX_FILE_BYTES:
+            QMessageBox.warning(
+                self,
+                "Archivo demasiado grande",
+                f"El archivo supera el límite de 35 MB "
+                f"({file_size / 1024 / 1024:.1f} MB).\n"
+                "Por favor, comprime el archivo antes de enviarlo.",
+            )
+            return
+
+        data_b64 = base64.b64encode(file_path.read_bytes()).decode("ascii")
+        filename = file_path.name
+
+        self._send_file_to_clients([client_id], filename, data_b64)
+        QMessageBox.information(
+            self,
+            "Documento enviado",
+            f"'{filename}' fue enviado a {hostname}.\n"
+            "El archivo quedará guardado en su Escritorio.",
+        )
 
     def _send_wol_selected(self, client_ids: list[str]) -> None:
         if self._server and self._loop:
@@ -1331,6 +1477,87 @@ class ShowTeacherDialog(QDialog):
             Selected quality as an integer (0–100).
         """
         return self._quality_combo.currentData()
+
+
+# ---------------------------------------------------------------------------
+# Send-file dialog
+# ---------------------------------------------------------------------------
+
+class SendFileDialog(QDialog):
+    """Modal dialog for choosing which connected students receive a document.
+
+    Shows the selected filename and lets the teacher send it to all connected
+    students or to a specific subset.
+
+    Args:
+        client_ids: List of currently *connected* client identifiers.
+        filename:   Name of the file about to be sent (display only).
+        parent:     Optional parent widget.
+    """
+
+    def __init__(
+        self,
+        client_ids: list[str],
+        filename: str,
+        parent: Optional[QWidget] = None,
+    ) -> None:
+        super().__init__(parent)
+        self._client_ids = client_ids
+        self._filename = filename
+        self.setWindowTitle("📄 Enviar Documento")
+        self.setMinimumWidth(440)
+        self._setup_ui()
+
+    def _setup_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+        layout.setContentsMargins(16, 16, 16, 16)
+
+        layout.addWidget(QLabel("Archivo seleccionado:"))
+        file_label = QLabel(self._filename)
+        file_label.setWordWrap(True)
+        layout.addWidget(file_label)
+
+        layout.addWidget(QLabel("Enviar a:"))
+
+        self._radio_all = QRadioButton("Todos los alumnos conectados")
+        self._radio_all.setChecked(True)
+        self._radio_all.toggled.connect(self._toggle_list)
+        layout.addWidget(self._radio_all)
+
+        self._radio_selected = QRadioButton("Alumnos seleccionados:")
+        layout.addWidget(self._radio_selected)
+
+        self._list_widget = QListWidget()
+        self._list_widget.setEnabled(False)
+        self._list_widget.setSelectionMode(
+            QListWidget.SelectionMode.MultiSelection
+        )
+        for cid in self._client_ids:
+            self._list_widget.addItem(QListWidgetItem(cid))
+        layout.addWidget(self._list_widget)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Enviar")
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setProperty(
+            "class", "success"
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    @pyqtSlot(bool)
+    def _toggle_list(self, all_selected: bool) -> None:
+        self._list_widget.setEnabled(not all_selected)
+
+    def get_selected_client_ids(self) -> list[str]:
+        """Return the client IDs chosen by the teacher."""
+        if self._radio_all.isChecked():
+            return list(self._client_ids)
+        return [item.text() for item in self._list_widget.selectedItems()]
 
 
 if __name__ == "__main__":

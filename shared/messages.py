@@ -1,5 +1,5 @@
 """
-shared/messages.py
+shared/messages.py Yan
 ==================
 Dataclasses and helpers for the DLSlab client-server protocol.
 
@@ -56,6 +56,7 @@ class MessageType(str, Enum):
     OPEN_URL = "OPEN_URL"
     RUN_APP = "RUN_APP"
     CLIENT_MAC = "CLIENT_MAC"
+    SEND_FILE = "SEND_FILE"
 
 
 # ---------------------------------------------------------------------------
@@ -507,4 +508,22 @@ def make_run_app(server_id: str, path: str, args: list[str] | None = None) -> Me
         type=MessageType.RUN_APP,
         client_id=server_id,
         payload={"path": path, "args": args or []},
+    )
+
+
+def make_send_file(server_id: str, filename: str, data_b64: str) -> Message:
+    """Build a SEND_FILE message carrying a base64-encoded document.
+
+    Args:
+        server_id: Identifier of the server.
+        filename:  Original filename (e.g. ``"practica1.pdf"``).
+        data_b64:  Base64-encoded binary contents of the file.
+
+    Returns:
+        A :class:`Message` of type SEND_FILE.
+    """
+    return Message(
+        type=MessageType.SEND_FILE,
+        client_id=server_id,
+        payload={"filename": filename, "data": data_b64},
     )

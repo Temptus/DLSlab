@@ -48,6 +48,7 @@ from shared.messages import (
     make_request_hires_screenshot,
     make_restart,
     make_run_app,
+    make_send_file,
     make_shutdown,
     make_start_show_student,
     make_start_show_teacher,
@@ -130,7 +131,7 @@ class DLSlabServer:
             self._handle_client,
             host=self.host,
             port=self.port,
-            limit=10 * 1024 * 1024  # 10 MB maximum buffer size for StreamReader (matches MAX_MESSAGE_BYTES)
+            limit=50 * 1024 * 1024  # 50 MB — matches MAX_MESSAGE_BYTES
         )
         addr = self._server.sockets[0].getsockname()
         logger.info("DLSlab server listening on %s:%s", addr[0], addr[1])
@@ -479,6 +480,31 @@ class DLSlabServer:
         targets = self._resolve_targets(client_ids)
         for cid in targets:
             await self.send_to_client(cid, msg)
+
+    async def send_file(
+        self,
+        client_ids: list[str] | None,
+        filename: str,
+        data_b64: str,
+    ) -> None:
+        """Send a file to target clients so they save it to their Desktop.
+
+        Args:
+            client_ids: List of client identifiers to target.  Pass ``None``
+                        to send to **all** currently connected clients.
+            filename:   Original filename (e.g. ``"practica1.pdf"``).
+            data_b64:   Base64-encoded binary contents of the file.
+        """
+        msg = make_send_file("server", filename, data_b64)
+        targets = self._resolve_targets(client_ids)
+        for cid in targets:
+            await self.send_to_client(cid, msg)
+        logger.info(
+            "send_file sent to %d client(s) — filename=%r  payload=%d chars",
+            len(targets),
+            filename,
+            len(data_b64),
+        )
 
     async def wake_on_lan(self, client_ids: list[str] | None) -> dict[str, bool]:
         """Wake clients via Wake-on-LAN."""
