@@ -30,7 +30,7 @@ import logging
 import signal
 import sys
 from datetime import datetime, timezone
-from typing import Callable
+from typing import Any, Callable
 
 from server.client_manager import ClientManager
 from server.protocol import read_message, write_message
@@ -45,6 +45,7 @@ from shared.messages import (
     make_logout,
     make_open_url,
     make_pong,
+    make_remote_input,
     make_request_hires_screenshot,
     make_restart,
     make_run_app,
@@ -119,6 +120,9 @@ class DLSlabServer:
         self._stop_event: asyncio.Event | None = None
         self._streamer = TeacherScreenStreamer(self)
         self._student_streamer = StudentStreamer(self)
+        # Control remoto del profesor — cliente objetivo y callback de frame
+        self._teacher_control_client_id: str | None = None
+        self._on_teacher_control_frame: Callable[[str], None] | None = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -515,6 +519,73 @@ class DLSlabServer:
             results[client_id] = self.wol_manager.wake(client_id)
         return results
 
+    # ------------------------------------------------------------------
+    # Teacher remote control
+    # ------------------------------------------------------------------
+
+    async def start_teacher_control(
+        self,
+        client_id: str,
+        on_frame: Callable[[str], None],
+    ) -> None:
+        """Iniciar modo control remoto del profesor sobre un estudiante.
+
+        Envía ``REQUEST_HIRES_SCREENSHOT`` al cliente para que comience a
+        emitir frames de alta resolución, que se redirigen exclusivamente
+        al callback ``on_frame`` (no se difunden a otros estudiantes).
+
+        Args:
+            client_id: Cliente objetivo (estudiante a controlar).
+            on_frame:  Callable ``(frame_b64: str) -> None`` invocado cada vez
+                       que llega un frame hires del estudiante.
+        """
+        # Si había una sesión activa anterior, detenerla limpiamente primero.
+        if self._teacher_control_client_id:
+            await self.stop_teacher_control()
+
+        self._teacher_control_client_id = client_id
+        self._on_teacher_control_frame = on_frame
+        await self.send_to_client(client_id, make_request_hires_screenshot("server"))
+        logger.info("Teacher control started — target=%s", client_id)
+
+    async def stop_teacher_control(self) -> None:
+        """Detener el modo control remoto del profesor.
+
+        Envía ``STOP_HIRES_SCREENSHOT`` al cliente activo y limpia el estado.
+        Es seguro llamarlo aunque no haya ninguna sesión activa.
+        """
+        if self._teacher_control_client_id:
+            await self.send_to_client(
+                self._teacher_control_client_id,
+                make_stop_hires_screenshot("server"),
+            )
+            logger.info(
+                "Teacher control stopped — was targeting %s",
+                self._teacher_control_client_id,
+            )
+        self._teacher_control_client_id = None
+        self._on_teacher_control_frame = None
+
+    async def send_remote_input(
+        self,
+        client_id: str,
+        event_type: str,
+        event_data: dict[str, Any],
+    ) -> bool:
+        """Enviar un evento de entrada remota (mouse o teclado) a un cliente.
+
+        Args:
+            client_id:  Cliente que ejecutará el evento.
+            event_type: Tipo de evento: ``mouse_move``, ``mouse_click``,
+                        ``key_press`` o ``key_release``.
+            event_data: Parámetros del evento (coordenadas, tecla, etc.).
+
+        Returns:
+            ``True`` si el mensaje fue enviado, ``False`` en caso contrario.
+        """
+        msg = make_remote_input("server", client_id, event_type, event_data)
+        return await self.send_to_client(client_id, msg)
+
     def _resolve_targets(self, client_ids: list[str] | None) -> list[str]:
         """Resolve target client IDs from optional explicit list."""
         return list(self.clients.all_client_ids()) if client_ids is None else client_ids
@@ -625,15 +696,22 @@ class DLSlabServer:
         hostname = message.payload.get("hostname", message.client_id)
         ip = message.payload.get("ip", peer_ip)
         mac = str(message.payload.get("mac", "")).strip()
-        self.clients.register(message.client_id, hostname, ip, mac, writer)
+        sw = int(message.payload.get("screen_width", 0) or 0)
+        sh = int(message.payload.get("screen_height", 0) or 0)
+        self.clients.register(
+            message.client_id, hostname, ip, mac, writer,
+            screen_width=sw, screen_height=sh,
+        )
         if mac:
             self.wol_manager.register_mac(message.client_id, mac)
         logger.info(
-            "REGISTER  client_id=%s  hostname=%s  ip=%s  mac=%s",
+            "REGISTER  client_id=%s  hostname=%s  ip=%s  mac=%s  screen=%dx%d",
             message.client_id,
             hostname,
             ip,
             mac or "unknown",
+            sw,
+            sh,
         )
 
     async def _handle_client_mac(
@@ -662,12 +740,18 @@ class DLSlabServer:
         is_hires: bool = bool(message.payload.get("hires", False))
 
         if is_hires:
-            # High-resolution frame from the presenter — relay to audience.
+            # High-resolution frame del presentador — relay a la audiencia.
             if (
                 self._student_streamer.is_streaming
                 and message.client_id == self._student_streamer.presenter_id
             ):
                 await self._student_streamer.relay_frame(image_b64)
+            # Control remoto del profesor — enviar frame solo al profesor.
+            if (
+                self._teacher_control_client_id == message.client_id
+                and self._on_teacher_control_frame is not None
+            ):
+                self._on_teacher_control_frame(image_b64)
         else:
             # Normal thumbnail — pass to the UI callback.
             logger.debug(

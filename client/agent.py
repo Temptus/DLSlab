@@ -246,13 +246,19 @@ class DLSlabAgent:
     async def _send_register(self, writer: asyncio.StreamWriter) -> None:
         local_ip = self._get_local_ip()
         mac = PowerManager.get_mac_address()
-        msg = make_register(self.client_id, self.hostname, local_ip, mac=mac)
+        sw, sh = ScreenCapture.get_screen_size()
+        msg = make_register(
+            self.client_id, self.hostname, local_ip,
+            mac=mac, screen_width=sw, screen_height=sh,
+        )
         await write_message(writer, msg)
         logger.info(
-            "Sent REGISTER (hostname=%s, ip=%s, mac=%s)",
+            "Sent REGISTER (hostname=%s, ip=%s, mac=%s, screen=%dx%d)",
             self.hostname,
             local_ip,
             mac,
+            sw,
+            sh,
         )
 
     async def _screenshot_loop(self, writer: asyncio.StreamWriter) -> None:

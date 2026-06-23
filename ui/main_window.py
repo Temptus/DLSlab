@@ -58,6 +58,7 @@ from server.main_server import DLSlabServer
 from ui.log_window import PolicyLogWindow
 from ui.policy_dialog import PolicyDialog
 from ui.power_dialog import PowerDialog
+from ui.remote_desktop_window import RemoteDesktopWindow
 from ui.thumbnail_widget import ThumbnailWidget
 
 from qt_material import apply_stylesheet
@@ -469,6 +470,7 @@ class MainWindow(QMainWindow):
             )
             widget.unblock_requested.connect(self._send_unblank_single)
             widget.send_file_requested.connect(self._on_send_file_requested)
+            widget.remote_control_requested.connect(self._on_remote_control_requested)
             self._thumbnails[client_id] = widget
             widget.set_policy_active(
                 self._app_policy_state.get(client_id),
@@ -1031,6 +1033,65 @@ class MainWindow(QMainWindow):
             client_id: The client ID of the student to present.
         """
         self._start_show_student(client_id)
+
+    @pyqtSlot(str)
+    def _on_remote_control_requested(self, client_id: str) -> None:
+        """Abrir la ventana de control remoto para el estudiante indicado.
+
+        Solicita al servidor que comience el stream hires del cliente y abre
+        :class:`~ui.remote_desktop_window.RemoteDesktopWindow`.  Los eventos
+        de mouse y teclado del profesor se envían como ``REMOTE_INPUT`` al
+        cliente en tiempo real.
+
+        Args:
+            client_id: Identificador del cliente a controlar.
+        """
+        if not self._server:
+            return
+
+        info = self._server.clients.get(client_id)
+        hostname = info.hostname if info else client_id
+        sw = info.screen_width if info else 0
+        sh = info.screen_height if info else 0
+
+        def on_remote_input(event_type: str, event_data: dict) -> None:
+            """Enviar evento de input al cliente via el servidor asyncio."""
+            if self._server and self._loop:
+                asyncio.run_coroutine_threadsafe(
+                    self._server.send_remote_input(client_id, event_type, event_data),
+                    self._loop,
+                )
+
+        def on_close() -> None:
+            """Detener el stream hires cuando el profesor cierra la ventana."""
+            if self._server and self._loop:
+                asyncio.run_coroutine_threadsafe(
+                    self._server.stop_teacher_control(),
+                    self._loop,
+                )
+
+        win = RemoteDesktopWindow(
+            hostname=hostname,
+            screen_width=sw,
+            screen_height=sh,
+            on_remote_input=on_remote_input,
+            on_close=on_close,
+        )
+
+        def _deliver_frame(frame_b64: str) -> None:
+            """Entregar frame al widget Qt de forma thread-safe."""
+            QTimer.singleShot(0, lambda f=frame_b64: win.update_frame(f))
+
+        if self._server and self._loop:
+            asyncio.run_coroutine_threadsafe(
+                self._server.start_teacher_control(client_id, _deliver_frame),
+                self._loop,
+            )
+
+        win.show()
+        win.raise_()
+        win.activateWindow()
+        logger.info("Remote control window opened for client=%s", client_id)
 
     def _start_show_student(self, presenter_id: str) -> None:
         """Dispatch start-show-student commands and update the UI.

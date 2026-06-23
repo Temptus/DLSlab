@@ -123,13 +123,17 @@ def make_register(
     hostname: str,
     ip: str,
     mac: str = "",
+    screen_width: int = 0,
+    screen_height: int = 0,
 ) -> Message:
     """Build a REGISTER message.
 
     Args:
-        client_id: Unique identifier for the client (e.g. UUID or hostname).
-        hostname:  Human-readable machine name.
-        ip:        Client IP address as seen from the client itself.
+        client_id:     Unique identifier for the client (e.g. UUID or hostname).
+        hostname:      Human-readable machine name.
+        ip:            Client IP address as seen from the client itself.
+        screen_width:  Horizontal resolution of the client's primary monitor.
+        screen_height: Vertical resolution of the client's primary monitor.
 
     Returns:
         A :class:`Message` of type REGISTER.
@@ -137,7 +141,13 @@ def make_register(
     return Message(
         type=MessageType.REGISTER,
         client_id=client_id,
-        payload={"hostname": hostname, "ip": ip, "mac": mac},
+        payload={
+            "hostname": hostname,
+            "ip": ip,
+            "mac": mac,
+            "screen_width": screen_width,
+            "screen_height": screen_height,
+        },
     )
 
 

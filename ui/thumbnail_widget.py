@@ -75,6 +75,7 @@ class ThumbnailWidget(QWidget):
     lock_requested = pyqtSignal(str)  # str = client_id
     unblock_requested = pyqtSignal(str)  # str = client_id
     send_file_requested = pyqtSignal(str)  # str = client_id
+    remote_control_requested = pyqtSignal(str)  # str = client_id
 
     def __init__(
         self,
@@ -472,6 +473,7 @@ class ThumbnailWidget(QWidget):
             return
         menu = QMenu(self)
         present_action = menu.addAction("📺 Presentar al resto ")
+        remote_control_action = menu.addAction("🖥️ Tomar Control")
         if self._blocked:
             toggle_action = menu.addAction("🔓 Desbloquear")
         else:
@@ -482,6 +484,8 @@ class ThumbnailWidget(QWidget):
 
         if action == present_action:
             self.present_requested.emit(self.client_id)
+        elif action == remote_control_action:
+            self.remote_control_requested.emit(self.client_id)
         elif action == toggle_action:
             if self._blocked:
                 self.unblock_requested.emit(self.client_id)

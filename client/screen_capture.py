@@ -20,7 +20,7 @@ from __future__ import annotations
 import base64
 import io
 import logging
-from typing import Optional
+from typing import Optional, Tuple
 
 try:
     import mss
@@ -93,6 +93,25 @@ class ScreenCapture:
         except Exception as exc:
             logger.exception("Screen capture failed: %s", exc)
             return None
+
+    @staticmethod
+    def get_screen_size() -> Tuple[int, int]:
+        """Return ``(width, height)`` of the primary monitor.
+
+        Falls back to ``(1920, 1080)`` if ``mss`` is unavailable or the
+        query fails.
+
+        Returns:
+            A tuple ``(width, height)`` in pixels.
+        """
+        if not _MSS_AVAILABLE:
+            return (1920, 1080)
+        try:
+            with mss.mss() as sct:
+                m = sct.monitors[1]
+                return (m["width"], m["height"])
+        except Exception:
+            return (1920, 1080)
 
     # ------------------------------------------------------------------
     # Internal helpers
