@@ -67,6 +67,8 @@ class RemoteDesktopWindow(QWidget):
 
     #: Emitida justo antes de que la ventana se cierre.
     closed = pyqtSignal()
+    #: Señal thread-safe para entregar frames desde el hilo asyncio al hilo Qt.
+    frame_ready = pyqtSignal(str)
 
     def __init__(
         self,
@@ -92,6 +94,10 @@ class RemoteDesktopWindow(QWidget):
         self.setMouseTracking(True)
 
         self._setup_ui()
+
+        # Conectar la señal thread-safe a update_frame para que los frames
+        # emitidos desde el hilo asyncio sean procesados en el hilo Qt.
+        self.frame_ready.connect(self.update_frame)
 
     # ------------------------------------------------------------------
     # UI setup

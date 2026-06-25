@@ -90,6 +90,13 @@ HIRES_QUALITY: int = 60
 HIRES_FPS: int = 10
 HIRES_INTERVAL: float = 1.0 / HIRES_FPS  # ~100 ms between hires frames
 
+# Remote-control capture constants — lower resolution for minimum latency
+REMOTE_CTRL_WIDTH: int = 1280 # 960
+REMOTE_CTRL_HEIGHT: int = 720 # 540
+REMOTE_CTRL_QUALITY: int = 60 # 40
+REMOTE_CTRL_FPS: int = 30 # 20
+REMOTE_CTRL_INTERVAL: float = 1.0 / REMOTE_CTRL_FPS  # ~50 ms between frames
+
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
@@ -331,7 +338,7 @@ class DLSlabAgent:
             self._handle_stop_show_teacher(message)
 
         elif message.type == MessageType.REQUEST_HIRES_SCREENSHOT:
-            await self._handle_request_hires_screenshot(writer)
+            await self._handle_request_hires_screenshot(writer, message)
 
         elif message.type == MessageType.STOP_HIRES_SCREENSHOT:
             self._handle_stop_hires_screenshot()
@@ -448,21 +455,34 @@ class DLSlabAgent:
         self._signals.hide_teacher.emit()
 
     async def _handle_request_hires_screenshot(
-        self, writer: asyncio.StreamWriter
+        self, writer: asyncio.StreamWriter, message: "Message"
     ) -> None:
         """Start the high-resolution screenshot streaming loop.
+
+        Reads optional capture parameters (fps, quality, width, height) from
+        the message payload so the server can request different profiles for
+        class presentation vs. remote control.
 
         Cancels any pre-existing hires task before creating a new one.
 
         Args:
-            writer: The active connection writer used to send frames.
+            writer:  The active connection writer used to send frames.
+            message: The REQUEST_HIRES_SCREENSHOT message (may carry params).
         """
         self._cancel_hires_task()
+
+        fps     = int(message.payload.get("fps",     0) or 0) or HIRES_FPS
+        quality = int(message.payload.get("quality", 0) or 0) or HIRES_QUALITY
+        width   = int(message.payload.get("width",   0) or 0) or HIRES_WIDTH
+        height  = int(message.payload.get("height",  0) or 0) or HIRES_HEIGHT
+
         loop = asyncio.get_event_loop()
-        self._hires_task = loop.create_task(self._hires_screenshot_loop(writer))
+        self._hires_task = loop.create_task(
+            self._hires_screenshot_loop(writer, fps, quality, width, height)
+        )
         logger.info(
-            "REQUEST_HIRES_SCREENSHOT received — hires capture started (%d FPS).",
-            HIRES_FPS,
+            "REQUEST_HIRES_SCREENSHOT received — started %dx%d q=%d @%d FPS.",
+            width, height, quality, fps,
         )
 
     def _handle_stop_hires_screenshot(self) -> None:
@@ -631,20 +651,40 @@ class DLSlabAgent:
         except (TypeError, ValueError):
             return DEFAULT_POWER_DELAY_SECONDS
 
-    async def _hires_screenshot_loop(self, writer: asyncio.StreamWriter) -> None:
-        """Capture and transmit high-resolution frames at :data:`HIRES_FPS`.
+    async def _hires_screenshot_loop(
+        self,
+        writer: asyncio.StreamWriter,
+        fps: int = HIRES_FPS,
+        quality: int = HIRES_QUALITY,
+        width: int = HIRES_WIDTH,
+        height: int = HIRES_HEIGHT,
+    ) -> None:
+        """Capture and transmit high-resolution frames at the requested FPS.
+
+        Uses a **capture-first** strategy: the frame is captured and sent
+        before sleeping, so the sleep only covers the remaining time of the
+        target interval.  This eliminates the fixed pre-sleep delay that the
+        previous implementation had and reduces end-to-end latency by roughly
+        the capture time (typically 20–40 ms).
 
         Each frame is sent as a ``SCREENSHOT`` message with ``hires=True`` in
         the payload so the server can distinguish it from normal thumbnails.
 
         Args:
-            writer: The active connection writer used to send frames.
+            writer:  The active connection writer used to send frames.
+            fps:     Target frame rate.
+            quality: JPEG compression quality (0-95).
+            width:   Capture width in pixels.
+            height:  Capture height in pixels.
         """
-        hires_capture = ScreenCapture(
-            width=HIRES_WIDTH, height=HIRES_HEIGHT, quality=HIRES_QUALITY
-        )
+        import time as _time
+
+        interval = 1.0 / fps
+        hires_capture = ScreenCapture(width=width, height=height, quality=quality)
+
         while True:
-            await asyncio.sleep(HIRES_INTERVAL)
+            t0 = _time.monotonic()
+
             image_b64 = hires_capture.capture()
             if image_b64:
                 msg = Message(
@@ -658,6 +698,16 @@ class DLSlabAgent:
                     logger.warning("Hires capture: connection lost, stopping loop.")
                     break
                 logger.debug("Sent hires SCREENSHOT (%d chars)", len(image_b64))
+
+            # Sleep only the remaining time of the interval so capture time
+            # does not accumulate as extra latency.
+            elapsed = _time.monotonic() - t0
+            remaining = interval - elapsed
+            if remaining > 0:
+                await asyncio.sleep(remaining)
+            else:
+                # Yield control without sleeping so other coroutines can run.
+                await asyncio.sleep(0)
 
     def _cancel_hires_task(self) -> None:
         """Cancel the hires screenshot task if it is currently running."""

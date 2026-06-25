@@ -303,19 +303,43 @@ def make_teacher_frame(server_id: str, frame_b64: str) -> Message:
     )
 
 
-def make_request_hires_screenshot(server_id: str) -> Message:
+def make_request_hires_screenshot(
+    server_id: str,
+    fps: int = 0,
+    quality: int = 0,
+    width: int = 0,
+    height: int = 0,
+) -> Message:
     """Build a REQUEST_HIRES_SCREENSHOT message sent from the server to the presenter client.
+
+    Optional capture parameters can be passed in the payload so the client
+    adjusts FPS, JPEG quality and resolution for the specific use case
+    (e.g. remote control vs. class presentation).  A value of ``0`` means
+    "use the client's built-in default".
 
     Args:
         server_id: Identifier of the server.
+        fps:       Desired capture frame rate (0 = client default).
+        quality:   JPEG quality 0-95 (0 = client default).
+        width:     Capture width in pixels (0 = client default).
+        height:    Capture height in pixels (0 = client default).
 
     Returns:
         A :class:`Message` of type REQUEST_HIRES_SCREENSHOT.
     """
+    payload: dict = {}
+    if fps > 0:
+        payload["fps"] = fps
+    if quality > 0:
+        payload["quality"] = quality
+    if width > 0:
+        payload["width"] = width
+    if height > 0:
+        payload["height"] = height
     return Message(
         type=MessageType.REQUEST_HIRES_SCREENSHOT,
         client_id=server_id,
-        payload={},
+        payload=payload,
     )
 
 

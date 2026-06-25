@@ -530,23 +530,46 @@ class DLSlabServer:
     ) -> None:
         """Iniciar modo control remoto del profesor sobre un estudiante.
 
-        Envía ``REQUEST_HIRES_SCREENSHOT`` al cliente para que comience a
-        emitir frames de alta resolución, que se redirigen exclusivamente
-        al callback ``on_frame`` (no se difunden a otros estudiantes).
+        Envía ``REQUEST_HIRES_SCREENSHOT`` al cliente con parámetros optimizados
+        para control remoto (mayor FPS, menor resolución) en lugar de los
+        valores del modo presentación de clase.
 
         Args:
             client_id: Cliente objetivo (estudiante a controlar).
             on_frame:  Callable ``(frame_b64: str) -> None`` invocado cada vez
                        que llega un frame hires del estudiante.
         """
+        from client.agent import (
+            REMOTE_CTRL_FPS,
+            REMOTE_CTRL_QUALITY,
+            REMOTE_CTRL_WIDTH,
+            REMOTE_CTRL_HEIGHT,
+        )
+
         # Si había una sesión activa anterior, detenerla limpiamente primero.
         if self._teacher_control_client_id:
             await self.stop_teacher_control()
 
         self._teacher_control_client_id = client_id
         self._on_teacher_control_frame = on_frame
-        await self.send_to_client(client_id, make_request_hires_screenshot("server"))
-        logger.info("Teacher control started — target=%s", client_id)
+        await self.send_to_client(
+            client_id,
+            make_request_hires_screenshot(
+                "server",
+                fps=REMOTE_CTRL_FPS,
+                quality=REMOTE_CTRL_QUALITY,
+                width=REMOTE_CTRL_WIDTH,
+                height=REMOTE_CTRL_HEIGHT,
+            ),
+        )
+        logger.info(
+            "Teacher control started — target=%s  %dx%d q=%d @%d FPS",
+            client_id,
+            REMOTE_CTRL_WIDTH,
+            REMOTE_CTRL_HEIGHT,
+            REMOTE_CTRL_QUALITY,
+            REMOTE_CTRL_FPS,
+        )
 
     async def stop_teacher_control(self) -> None:
         """Detener el modo control remoto del profesor.

@@ -97,6 +97,7 @@ class MainWindow(QMainWindow):
         self._web_policy_state: dict[str, str | None] = {}
         self._pending_policy_violations: list[tuple[str, str, str]] = []
         self._known_macs: dict[str, str] = {}
+        self._remote_control_window: Optional[RemoteDesktopWindow] = None
 
         self._server: Optional[DLSlabServer] = None
         self._server_thread: Optional[threading.Thread] = None
@@ -1049,6 +1050,11 @@ class MainWindow(QMainWindow):
         if not self._server:
             return
 
+        # Cerrar ventana anterior si existe
+        if self._remote_control_window is not None:
+            self._remote_control_window.close()
+            self._remote_control_window = None
+
         info = self._server.clients.get(client_id)
         hostname = info.hostname if info else client_id
         sw = info.screen_width if info else 0
@@ -1069,6 +1075,7 @@ class MainWindow(QMainWindow):
                     self._server.stop_teacher_control(),
                     self._loop,
                 )
+            self._remote_control_window = None
 
         win = RemoteDesktopWindow(
             hostname=hostname,
@@ -1077,10 +1084,17 @@ class MainWindow(QMainWindow):
             on_remote_input=on_remote_input,
             on_close=on_close,
         )
+        # Guardar referencia para evitar que el GC destruya la ventana
+        self._remote_control_window = win
 
         def _deliver_frame(frame_b64: str) -> None:
-            """Entregar frame al widget Qt de forma thread-safe."""
-            QTimer.singleShot(0, lambda f=frame_b64: win.update_frame(f))
+            """Entregar frame al widget Qt de forma thread-safe.
+
+            Se llama desde el hilo asyncio del servidor.  Emitir la señal
+            frame_ready es thread-safe en Qt y garantiza que update_frame
+            se ejecute en el hilo Qt principal.
+            """
+            win.frame_ready.emit(frame_b64)
 
         if self._server and self._loop:
             asyncio.run_coroutine_threadsafe(
@@ -1463,10 +1477,9 @@ class ShowTeacherDialog(QDialog):
         fps_row.addWidget(QLabel("Fotogramas por segundo (FPS):"))
         self._fps_combo = QComboBox()
         for fps in self._FPS_OPTIONS:
-            self._fps_combo.addItem(str(fps), fps)
+            self._fps_combo.addItem(str(fps).lstrip(), fps)
         self._fps_combo.setCurrentIndex(1)  # default 10 FPS
         fps_row.addWidget(self._fps_combo)
-        fps_row.addStretch()
         layout.addLayout(fps_row)
 
         # Quality selector
@@ -1477,7 +1490,6 @@ class ShowTeacherDialog(QDialog):
             self._quality_combo.addItem(f"{q}%", q)
         self._quality_combo.setCurrentIndex(1)  # default 60%
         quality_row.addWidget(self._quality_combo)
-        quality_row.addStretch()
         layout.addLayout(quality_row)
 
         # Buttons
