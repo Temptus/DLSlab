@@ -185,6 +185,12 @@ class DLSlabAgent:
                 logger.warning(
                     "Connection failed (%s). Retrying in %.0f s…", exc, delay
                 )
+            except BaseExceptionGroup as exc_group:
+                _connection_errors = (ConnectionResetError, BrokenPipeError, OSError)
+                if all(isinstance(e, _connection_errors) for e in exc_group.exceptions):
+                    logger.warning("Connection lost. Retrying in %.0f s…", delay)
+                else:
+                    logger.exception("Unexpected error: %s. Retrying in %.0f s…", exc_group, delay)
             except Exception as exc:
                 logger.exception("Unexpected error: %s. Retrying in %.0f s…", exc, delay)
 
@@ -275,7 +281,10 @@ class DLSlabAgent:
             image_b64 = self._screen_capture.capture()
             if image_b64:
                 msg = make_screenshot(self.client_id, image_b64)
-                await write_message(writer, msg)
+                try:
+                    await write_message(writer, msg)
+                except (ConnectionResetError, BrokenPipeError, OSError):
+                    return
                 logger.debug("Sent SCREENSHOT (%d chars)", len(image_b64))
 
     async def _ping_loop(self, writer: asyncio.StreamWriter) -> None:
@@ -283,7 +292,10 @@ class DLSlabAgent:
         while True:
             await asyncio.sleep(PING_INTERVAL)
             msg = make_ping(self.client_id)
-            await write_message(writer, msg)
+            try:
+                await write_message(writer, msg)
+            except (ConnectionResetError, BrokenPipeError, OSError):
+                return
             logger.debug("Sent PING")
 
     # ------------------------------------------------------------------
