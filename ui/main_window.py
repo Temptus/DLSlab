@@ -55,6 +55,7 @@ from PyQt6.QtWidgets import (
 )
 
 from server.main_server import DLSlabServer
+from client.student_display import StudentDisplay
 from ui.log_window import PolicyLogWindow
 from ui.policy_dialog import PolicyDialog
 from ui.power_dialog import PowerDialog
@@ -98,6 +99,7 @@ class MainWindow(QMainWindow):
         self._pending_policy_violations: list[tuple[str, str, str]] = []
         self._known_macs: dict[str, str] = {}
         self._remote_control_window: Optional[RemoteDesktopWindow] = None
+        self._student_display: Optional[StudentDisplay] = None
 
         self._server: Optional[DLSlabServer] = None
         self._server_thread: Optional[threading.Thread] = None
@@ -1117,9 +1119,28 @@ class MainWindow(QMainWindow):
         if self._presenting_client is not None:
             self._stop_show_student()
 
+        # Resolve presenter name for the display banner.
+        presenter_name = presenter_id
+        if self._server:
+            info = self._server.clients.get(presenter_id)
+            if info:
+                presenter_name = info.hostname
+
+        # Create (or reuse) and show the teacher-side student display.
+        if self._student_display is None:
+            self._student_display = StudentDisplay()
+        self._student_display.show(presenter_name, on_stop=self._stop_show_student)
+
         if self._server and self._loop:
+            # Capture the frame_ready signal once the window is initialised.
+            frame_signal = self._student_display.frame_ready
+
+            def _deliver_student_frame(frame_b64: str) -> None:
+                """Forward a presenter frame to the teacher display thread-safely."""
+                frame_signal.emit(frame_b64)
+
             asyncio.run_coroutine_threadsafe(
-                self._server.start_show_student(presenter_id, None),
+                self._server.start_show_student(presenter_id, None, _deliver_student_frame),
                 self._loop,
             )
 
@@ -1137,11 +1158,6 @@ class MainWindow(QMainWindow):
 
         # Update toolbar and status.
         self._stop_student_action.setEnabled(True)
-        presenter_name = presenter_id
-        if self._server:
-            info = self._server.clients.get(presenter_id)
-            if info:
-                presenter_name = info.hostname
         self._student_presentation_label.setText(
             f"  🎓 {presenter_name} está presentando"
         )
@@ -1156,6 +1172,10 @@ class MainWindow(QMainWindow):
                 self._server.stop_show_student(),
                 self._loop,
             )
+
+        # Hide the teacher-side student display.
+        if self._student_display is not None:
+            self._student_display.hide()
 
         # Clear presenter badge.
         if self._presenting_client:

@@ -123,6 +123,9 @@ class DLSlabServer:
         # Control remoto del profesor — cliente objetivo y callback de frame
         self._teacher_control_client_id: str | None = None
         self._on_teacher_control_frame: Callable[[str], None] | None = None
+        # Callback para entregar frames del presentador al profesor durante
+        # una sesión "Presentar al resto" (show-student).
+        self._on_student_frame: Callable[[str], None] | None = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -284,6 +287,7 @@ class DLSlabServer:
         self,
         presenter_id: str,
         audience_ids: list[str] | None,
+        on_frame: Callable[[str], None] | None = None,
     ) -> None:
         """Begin a Show Student session for the given presenter.
 
@@ -298,6 +302,9 @@ class DLSlabServer:
             audience_ids: Explicit list of audience client IDs.  Pass ``None``
                           to target **all** currently connected clients except
                           the presenter.
+            on_frame:     Optional callback ``(frame_b64: str) -> None`` invoked
+                          on every frame received from the presenter.  Intended
+                          for the teacher UI to show the student's screen locally.
         """
         if self._student_streamer.is_streaming:
             await self.stop_show_student()
@@ -331,6 +338,10 @@ class DLSlabServer:
             presenter_id=presenter_id,
             audience_ids=resolved_audience,
         )
+
+        # Register teacher-side frame callback (may be None).
+        self._on_student_frame = on_frame
+
         logger.info(
             "start_show_student — presenter=%s name=%r audience=%d client(s)",
             presenter_id,
@@ -362,6 +373,7 @@ class DLSlabServer:
 
         # Stop the relay before sending messages so no stale frames are forwarded.
         self._student_streamer.stop()
+        self._on_student_frame = None
 
         # Tell the presenter to stop sending hires frames.
         if presenter_id:
@@ -769,6 +781,9 @@ class DLSlabServer:
                 and message.client_id == self._student_streamer.presenter_id
             ):
                 await self._student_streamer.relay_frame(image_b64)
+                # También entregarlo al profesor si hay un callback registrado.
+                if self._on_student_frame is not None:
+                    self._on_student_frame(image_b64)
             # Control remoto del profesor — enviar frame solo al profesor.
             if (
                 self._teacher_control_client_id == message.client_id
