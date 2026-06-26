@@ -604,8 +604,13 @@ class DLSlabAgent:
         if not path:
             logger.warning("RUN_APP ignored: missing path.")
             return
-        PowerManager.run_app(path, args=args)
-        logger.info("RUN_APP executed: %s %s", path, args)
+        try:
+            PowerManager.run_app(path, args=args)
+            logger.info("RUN_APP executed: %s %s", path, args)
+        except FileNotFoundError:
+            logger.warning("RUN_APP failed: application not found on this machine: %s", path)
+        except OSError as exc:
+            logger.warning("RUN_APP failed: OS error launching %s: %s", path, exc)
 
     def _handle_send_file(self, message: Message) -> None:
         """Receive a file from the server and save it to the Windows Desktop.

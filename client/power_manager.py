@@ -52,7 +52,12 @@ class PowerManager:
 
     @staticmethod
     def run_app(path: str, args: list[str] | None = None) -> None:
-        """Start an application with optional arguments."""
+        """Start an application with optional arguments.
+
+        Raises:
+            FileNotFoundError: if the executable is not found on this machine.
+            OSError: for other OS-level launch failures.
+        """
         subprocess.Popen([path] + (args or []))  # noqa: S603,S607
 
     @staticmethod
