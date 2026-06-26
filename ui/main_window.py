@@ -614,6 +614,7 @@ class MainWindow(QMainWindow):
         self._stop_stream_action.setEnabled(True)
         self._stream_action.setEnabled(False)
         self._live_label.show()
+        self._update_thumbnail_context_menus()
         logger.info(
             "Show-teacher started — %d client(s) fps=%d quality=%d",
             len(client_ids), fps, quality,
@@ -637,6 +638,17 @@ class MainWindow(QMainWindow):
         self._stream_action.setEnabled(True)
         self._live_label.hide()
         logger.info("Show-teacher stopped.")
+        self._update_thumbnail_context_menus()
+
+    def _update_thumbnail_context_menus(self) -> None:
+        """Enable or disable all thumbnail context menus based on active states.
+
+        The context menu is suppressed while the teacher is broadcasting their
+        screen *or* while they have remote control of a student terminal.
+        """
+        enabled = (not self._streaming_clients) and (self._remote_control_window is None)
+        for widget in self._thumbnails.values():
+            widget.set_context_menu_enabled(enabled)
 
     # ------------------------------------------------------------------
     # Policy control
@@ -1078,6 +1090,10 @@ class MainWindow(QMainWindow):
                     self._loop,
                 )
             self._remote_control_window = None
+            # Re-enable stream button only if no broadcast is active
+            if not self._streaming_clients:
+                self._stream_action.setEnabled(True)
+            self._update_thumbnail_context_menus()
 
         win = RemoteDesktopWindow(
             hostname=hostname,
@@ -1088,6 +1104,8 @@ class MainWindow(QMainWindow):
         )
         # Guardar referencia para evitar que el GC destruya la ventana
         self._remote_control_window = win
+        self._stream_action.setEnabled(False)
+        self._update_thumbnail_context_menus()
 
         def _deliver_frame(frame_b64: str) -> None:
             """Entregar frame al widget Qt de forma thread-safe.

@@ -95,6 +95,7 @@ class ThumbnailWidget(QWidget):
         self._web_policy: str | None = None
         self._power_state: str = "online"
         self._pixmap: Optional[QPixmap] = None
+        self._context_menu_enabled: bool = True
 
         self._setup_ui()
 
@@ -463,6 +464,16 @@ class ThumbnailWidget(QWidget):
         else:
             self._power_overlay.hide()
 
+    def set_context_menu_enabled(self, enabled: bool) -> None:
+        """Enable or disable the right-click context menu.
+
+        Args:
+            enabled: ``False`` to suppress the context menu (e.g. while the
+                     teacher is broadcasting or has remote control of a
+                     student terminal).
+        """
+        self._context_menu_enabled = enabled
+
     def contextMenuEvent(self, event: "QContextMenuEvent") -> None:  # noqa: N802
         """Show a context menu with presentation options on right-click.
 
@@ -470,6 +481,8 @@ class ThumbnailWidget(QWidget):
             event: The Qt context-menu event triggered by a right-click.
         """
         if not self._connected:
+            return
+        if not self._context_menu_enabled:
             return
         menu = QMenu(self)
         present_action = menu.addAction("📺 Presentar al resto ")
