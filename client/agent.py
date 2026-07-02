@@ -28,13 +28,17 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
+import configparser
 import logging
+import os
 import pathlib
 import socket
 import sys
 from typing import Optional
 
-from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtCore import QObject, Qt, pyqtSignal
+from PyQt6.QtGui import QBrush, QColor, QIcon, QPainter, QPixmap
+from PyQt6.QtWidgets import QMenu, QSystemTrayIcon
 
 from client.app_enforcer import AppEnforcer
 from client.blank_screen import BlankScreenOverlay
@@ -56,6 +60,25 @@ from shared.messages import (
 )
 
 # ---------------------------------------------------------------------------
+# Application version
+# ---------------------------------------------------------------------------
+
+APP_VERSION: str = "1.0"
+
+# ---------------------------------------------------------------------------
+# Configuration — reads from %ProgramData%\DLSlab\config.ini
+# ---------------------------------------------------------------------------
+
+CONFIG_DIR: pathlib.Path = (
+    pathlib.Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "DLSlab"
+)
+CONFIG_PATH: pathlib.Path = CONFIG_DIR / "config.ini"
+
+DEFAULT_SERVER_HOST: str = "127.0.0.1"
+DEFAULT_SERVER_PORT: int = 9000
+
+
+# ---------------------------------------------------------------------------
 # Qt signal bridge (cross-thread UI calls)
 # ---------------------------------------------------------------------------
 
@@ -70,13 +93,147 @@ class _AgentSignals(QObject):
     show_blank     = pyqtSignal(str)   # texto del overlay
     hide_blank     = pyqtSignal()
 
+    # Tray icon status (emitted from asyncio thread → handled in Qt main thread)
+    tray_connecting   = pyqtSignal(str)  # server_host
+    tray_connected    = pyqtSignal(str)  # server_host
+    tray_disconnected = pyqtSignal()
+
 
 # ---------------------------------------------------------------------------
-# Configuration constants
+# System tray icon — status only, no exit option
 # ---------------------------------------------------------------------------
 
-DEFAULT_SERVER_HOST: str = "127.0.0.1"
-DEFAULT_SERVER_PORT: int = 9000
+class _AgentTrayIcon(QSystemTrayIcon):
+    """Read-only system tray icon that shows the agent connection status.
+
+    Deliberately exposes **no exit or configuration options** so students
+    cannot interfere with the agent.  The context menu is informational only.
+    """
+
+    _COLOR_CONNECTING   = QColor(230, 160, 0)   # amber
+    _COLOR_CONNECTED    = QColor(0, 190, 0)      # green
+    _COLOR_DISCONNECTED = QColor(200, 0, 0)      # red
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+
+        self._server: str = "—"
+        self._status: str = "disconnected"
+
+        # Build a non-interactive context menu (all items disabled)
+        menu = QMenu()
+
+        title_action = menu.addAction(f"DLSlab Agent  v{APP_VERSION}")
+        title_action.setEnabled(False)
+
+        menu.addSeparator()
+
+        self._status_action = menu.addAction("● Desconectado")
+        self._status_action.setEnabled(False)
+
+        self.setContextMenu(menu)
+        self._refresh()
+        self.show()
+
+    # ------------------------------------------------------------------
+    # Public slots — connected to _AgentSignals in main()
+    # ------------------------------------------------------------------
+
+    def on_connecting(self, server: str) -> None:
+        self._server = server
+        self._status = "connecting"
+        self._status_action.setText(f"● Conectando a {server}…")
+        self._refresh()
+
+    def on_connected(self, server: str) -> None:
+        self._server = server
+        self._status = "connected"
+        self._status_action.setText(f"● Conectado a {server}")
+        self._refresh()
+
+    def on_disconnected(self) -> None:
+        self._status = "disconnected"
+        self._status_action.setText("● Desconectado")
+        self._refresh()
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _refresh(self) -> None:
+        """Redraw the tray icon and update the tooltip."""
+        color_map = {
+            "connecting":   self._COLOR_CONNECTING,
+            "connected":    self._COLOR_CONNECTED,
+            "disconnected": self._COLOR_DISCONNECTED,
+        }
+        color = color_map.get(self._status, self._COLOR_DISCONNECTED)
+        self.setIcon(self._make_icon(color))
+
+        status_labels = {
+            "connecting":   f"Conectando a {self._server}…",
+            "connected":    f"Conectado a {self._server}",
+            "disconnected": "Sin conexión",
+        }
+        label = status_labels.get(self._status, "Sin conexión")
+        self.setToolTip(f"DLSlab Agent\n{label}")
+
+    @staticmethod
+    def _make_icon(color: QColor) -> QIcon:
+        """Generate a 16×16 filled circle icon with the given color."""
+        pixmap = QPixmap(16, 16)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setBrush(QBrush(color))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(1, 1, 14, 14)
+        painter.end()
+        return QIcon(pixmap)
+
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Config loader
+# ---------------------------------------------------------------------------
+
+def load_config() -> tuple[str, int]:
+    """Read server host and port from the DLSlab config file.
+
+    Priority (highest → lowest):
+      1. ``%ProgramData%\\DLSlab\\config.ini``
+      2. Built-in defaults (127.0.0.1 : 9000)
+
+    Returns:
+        A ``(host, port)`` tuple with the resolved server address.
+    """
+    cfg = configparser.ConfigParser()
+    if CONFIG_PATH.exists():
+        cfg.read(CONFIG_PATH, encoding="utf-8")
+        logger.info("Config loaded from %s", CONFIG_PATH)
+    else:
+        logger.info("Config file not found at %s — using defaults.", CONFIG_PATH)
+
+    host = cfg.get("server", "host", fallback=DEFAULT_SERVER_HOST).strip()
+    port = cfg.getint("server", "port", fallback=DEFAULT_SERVER_PORT)
+    return host, port
+
+
+# ---------------------------------------------------------------------------
+# Timing constants
+# ---------------------------------------------------------------------------
+
 PING_INTERVAL: float = 5.0          # seconds between heartbeat PINGs
 RECONNECT_BASE_DELAY: float = 2.0   # initial back-off delay in seconds
 RECONNECT_MAX_DELAY: float = 60.0   # maximum back-off delay in seconds
@@ -96,17 +253,6 @@ REMOTE_CTRL_HEIGHT: int = 720 # 540
 REMOTE_CTRL_QUALITY: int = 60 # 40
 REMOTE_CTRL_FPS: int = 30 # 20
 REMOTE_CTRL_INTERVAL: float = 1.0 / REMOTE_CTRL_FPS  # ~50 ms between frames
-
-# ---------------------------------------------------------------------------
-# Logging
-# ---------------------------------------------------------------------------
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -178,6 +324,7 @@ class DLSlabAgent:
         delay = RECONNECT_BASE_DELAY
 
         while self._running:
+            self._signals.tray_connecting.emit(self.server_host)
             try:
                 await self._connect_and_run()
                 delay = RECONNECT_BASE_DELAY  # reset on clean disconnect
@@ -196,6 +343,7 @@ class DLSlabAgent:
 
             if not self._running:
                 break
+            self._signals.tray_disconnected.emit()
             await asyncio.sleep(delay)
             delay = min(delay * 2, RECONNECT_MAX_DELAY)
 
@@ -229,6 +377,7 @@ class DLSlabAgent:
             limit=50 * 1024 * 1024  # 50 MB — matches MAX_MESSAGE_BYTES
         )
         self._writer = writer
+        self._signals.tray_connected.emit(self.server_host)
         logger.info("Connected.")
 
         try:
@@ -779,20 +928,26 @@ class DLSlabAgent:
 # Entry point
 # ---------------------------------------------------------------------------
 
-def _parse_args() -> argparse.Namespace:
+def _parse_args(config_host: str, config_port: int) -> argparse.Namespace:
+    """Parse CLI arguments, using config file values as defaults.
+
+    Args:
+        config_host: Server host resolved from config.ini (or built-in default).
+        config_port: Server port resolved from config.ini (or built-in default).
+    """
     parser = argparse.ArgumentParser(
         description="DLSlab student agent — connects to the teacher server."
     )
     parser.add_argument(
         "--server-ip",
-        default=DEFAULT_SERVER_HOST,
-        help=f"Teacher server IP address (default: {DEFAULT_SERVER_HOST})",
+        default=config_host,
+        help=f"Teacher server IP or hostname (default from config: {config_host})",
     )
     parser.add_argument(
         "--server-port",
         type=int,
-        default=DEFAULT_SERVER_PORT,
-        help=f"Teacher server TCP port (default: {DEFAULT_SERVER_PORT})",
+        default=config_port,
+        help=f"Teacher server TCP port (default from config: {config_port})",
     )
     parser.add_argument(
         "--client-id",
@@ -802,34 +957,43 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-async def _main() -> None:
-    args = _parse_args()
-    agent = DLSlabAgent(
-        server_host=args.server_ip,
-        server_port=args.server_port,
-        client_id=args.client_id,
-    )
-    try:
-        await agent.run()
-    except KeyboardInterrupt:
-        await agent.stop()
-
-
 def main() -> None:
-    """Entry point: Qt en hilo principal, asyncio en hilo secundario."""
+    """Entry point: Qt en hilo principal, asyncio en hilo secundario.
+
+    Boot order:
+      1. Load ``config.ini`` to resolve server host/port.
+      2. Parse CLI args (override config values when provided explicitly).
+      3. Create ``QApplication`` and ``DLSlabAgent`` on the Qt main thread.
+      4. Create the status-only tray icon and wire it to agent signals.
+      5. Spin up asyncio in a daemon thread.
+      6. Block the main thread in the Qt event loop.
+    """
     import threading
     from PyQt6.QtWidgets import QApplication
+
+    app = QApplication(sys.argv)
+    # Prevent Qt from quitting when the last visible window closes
+    # (the tray icon is not a window).
+    app.setQuitOnLastWindowClosed(False)
+
+    # Resolve configuration: file → CLI args (CLI overrides file)
+    config_host, config_port = load_config()
+    args = _parse_args(config_host, config_port)
 
     # QApplication y DLSlabAgent DEBEN crearse en el hilo principal de Qt
     # para que los QObject y sus señales pertenezcan al hilo correcto.
     # Así Qt usará QueuedConnection automáticamente al emitir desde asyncio.
-    app = QApplication(sys.argv)
-    args = _parse_args()
     agent = DLSlabAgent(
         server_host=args.server_ip,
         server_port=args.server_port,
         client_id=args.client_id,
     )
+
+    # Status-only tray icon — no exit option for students
+    tray = _AgentTrayIcon()
+    agent._signals.tray_connecting.connect(tray.on_connecting)
+    agent._signals.tray_connected.connect(tray.on_connected)
+    agent._signals.tray_disconnected.connect(tray.on_disconnected)
 
     # asyncio corre en un hilo secundario, usando el agente ya creado
     def _run_asyncio() -> None:

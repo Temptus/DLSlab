@@ -24,12 +24,14 @@ class ClientInfo:
     """Metadata and I/O handles for a single connected student agent.
 
     Attributes:
-        client_id:  Unique identifier sent by the client during REGISTER.
-        hostname:   Human-readable machine name of the student PC.
-        ip:         IP address of the client as reported by the OS.
-        mac:        Client MAC address used for Wake-on-LAN.
-        last_seen:  UTC timestamp of the last successfully received message.
-        writer:     asyncio StreamWriter used to push messages to this client.
+        client_id:     Unique identifier sent by the client during REGISTER.
+        hostname:      Human-readable machine name of the student PC.
+        ip:            IP address of the client as reported by the OS.
+        mac:           Client MAC address used for Wake-on-LAN.
+        last_seen:     UTC timestamp of the last successfully received message.
+        writer:        asyncio StreamWriter used to push messages to this client.
+        screen_width:  Horizontal resolution of the client's primary monitor.
+        screen_height: Vertical resolution of the client's primary monitor.
     """
 
     client_id: str
@@ -38,6 +40,8 @@ class ClientInfo:
     mac: str
     last_seen: datetime
     writer: asyncio.StreamWriter
+    screen_width: int = 0
+    screen_height: int = 0
 
     def touch(self) -> None:
         """Update :attr:`last_seen` to the current UTC time."""
@@ -70,6 +74,8 @@ class ClientManager:
         ip: str,
         mac: str,
         writer: asyncio.StreamWriter,
+        screen_width: int = 0,
+        screen_height: int = 0,
     ) -> ClientInfo:
         """Register a new client or update an existing registration.
 
@@ -77,11 +83,13 @@ class ClientManager:
         reconnect), its entry is updated in place.
 
         Args:
-            client_id: Unique string identifier for the client.
-            hostname:  Human-readable machine name.
-            ip:        Client IP address.
-            mac:       Client MAC address (empty if unknown).
-            writer:    asyncio StreamWriter for the open TCP connection.
+            client_id:     Unique string identifier for the client.
+            hostname:      Human-readable machine name.
+            ip:            Client IP address.
+            mac:           Client MAC address (empty if unknown).
+            writer:        asyncio StreamWriter for the open TCP connection.
+            screen_width:  Horizontal resolution of the client's primary monitor.
+            screen_height: Vertical resolution of the client's primary monitor.
 
         Returns:
             The newly created or updated :class:`ClientInfo`.
@@ -93,14 +101,18 @@ class ClientManager:
             mac=mac,
             last_seen=datetime.now(tz=timezone.utc),
             writer=writer,
+            screen_width=screen_width,
+            screen_height=screen_height,
         )
         self._clients[client_id] = info
         logger.info(
-            "Client registered: %s (%s @ %s, mac=%s)",
+            "Client registered: %s (%s @ %s, mac=%s, screen=%dx%d)",
             client_id,
             hostname,
             ip,
             mac or "unknown",
+            screen_width,
+            screen_height,
         )
         return info
 

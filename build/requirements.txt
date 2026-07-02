@@ -1,0 +1,13 @@
+# Runtime dependencies
+PyQt6>=6.6.0
+mss>=9.0.1
+Pillow>=10.0.0
+pynput>=1.7.6
+wakeonlan>=3.0.0
+psutil>=5.9.0
+
+# Build dependencies
+pyinstaller>=6.0.0
+
+qt-material
+qtawesome

@@ -30,7 +30,7 @@ import logging
 import signal
 import sys
 from datetime import datetime, timezone
-from typing import Callable
+from typing import Any, Callable
 
 from server.client_manager import ClientManager
 from server.protocol import read_message, write_message
@@ -45,9 +45,11 @@ from shared.messages import (
     make_logout,
     make_open_url,
     make_pong,
+    make_remote_input,
     make_request_hires_screenshot,
     make_restart,
     make_run_app,
+    make_send_file,
     make_shutdown,
     make_start_show_student,
     make_start_show_teacher,
@@ -115,8 +117,15 @@ class DLSlabServer:
         self.clients = ClientManager()
         self.wol_manager = WolManager(self.clients)
         self._server: asyncio.AbstractServer | None = None
+        self._stop_event: asyncio.Event | None = None
         self._streamer = TeacherScreenStreamer(self)
         self._student_streamer = StudentStreamer(self)
+        # Control remoto del profesor — cliente objetivo y callback de frame
+        self._teacher_control_client_id: str | None = None
+        self._on_teacher_control_frame: Callable[[str], None] | None = None
+        # Callback para entregar frames del presentador al profesor durante
+        # una sesión "Presentar al resto" (show-student).
+        self._on_student_frame: Callable[[str], None] | None = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -124,22 +133,36 @@ class DLSlabServer:
 
     async def start(self) -> None:
         """Start listening for incoming client connections."""
+        self._stop_event = asyncio.Event()
         self._server = await asyncio.start_server(
             self._handle_client,
             host=self.host,
             port=self.port,
+            limit=50 * 1024 * 1024  # 50 MB — matches MAX_MESSAGE_BYTES
         )
         addr = self._server.sockets[0].getsockname()
         logger.info("DLSlab server listening on %s:%s", addr[0], addr[1])
-        async with self._server:
-            await self._server.serve_forever()
+
+        # Wait until stop() signals shutdown
+        await self._stop_event.wait()
+
+        # Stop accepting new connections
+        self._server.close()
+
+        # Cancel all active client handler tasks so wait_closed() doesn't hang
+        current = asyncio.current_task()
+        tasks = [t for t in asyncio.all_tasks() if t is not current]
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+        await self._server.wait_closed()
+        logger.info("DLSlab server stopped.")
 
     async def stop(self) -> None:
         """Gracefully shut down the server."""
-        if self._server:
-            self._server.close()
-            await self._server.wait_closed()
-            logger.info("DLSlab server stopped.")
+        if self._stop_event:
+            self._stop_event.set()
 
     async def send_to_client(self, client_id: str, message: Message) -> bool:
         """Send *message* to a specific client.
@@ -264,6 +287,7 @@ class DLSlabServer:
         self,
         presenter_id: str,
         audience_ids: list[str] | None,
+        on_frame: Callable[[str], None] | None = None,
     ) -> None:
         """Begin a Show Student session for the given presenter.
 
@@ -278,6 +302,9 @@ class DLSlabServer:
             audience_ids: Explicit list of audience client IDs.  Pass ``None``
                           to target **all** currently connected clients except
                           the presenter.
+            on_frame:     Optional callback ``(frame_b64: str) -> None`` invoked
+                          on every frame received from the presenter.  Intended
+                          for the teacher UI to show the student's screen locally.
         """
         if self._student_streamer.is_streaming:
             await self.stop_show_student()
@@ -311,6 +338,10 @@ class DLSlabServer:
             presenter_id=presenter_id,
             audience_ids=resolved_audience,
         )
+
+        # Register teacher-side frame callback (may be None).
+        self._on_student_frame = on_frame
+
         logger.info(
             "start_show_student — presenter=%s name=%r audience=%d client(s)",
             presenter_id,
@@ -342,6 +373,7 @@ class DLSlabServer:
 
         # Stop the relay before sending messages so no stale frames are forwarded.
         self._student_streamer.stop()
+        self._on_student_frame = None
 
         # Tell the presenter to stop sending hires frames.
         if presenter_id:
@@ -465,6 +497,31 @@ class DLSlabServer:
         for cid in targets:
             await self.send_to_client(cid, msg)
 
+    async def send_file(
+        self,
+        client_ids: list[str] | None,
+        filename: str,
+        data_b64: str,
+    ) -> None:
+        """Send a file to target clients so they save it to their Desktop.
+
+        Args:
+            client_ids: List of client identifiers to target.  Pass ``None``
+                        to send to **all** currently connected clients.
+            filename:   Original filename (e.g. ``"practica1.pdf"``).
+            data_b64:   Base64-encoded binary contents of the file.
+        """
+        msg = make_send_file("server", filename, data_b64)
+        targets = self._resolve_targets(client_ids)
+        for cid in targets:
+            await self.send_to_client(cid, msg)
+        logger.info(
+            "send_file sent to %d client(s) — filename=%r  payload=%d chars",
+            len(targets),
+            filename,
+            len(data_b64),
+        )
+
     async def wake_on_lan(self, client_ids: list[str] | None) -> dict[str, bool]:
         """Wake clients via Wake-on-LAN."""
         if client_ids is None:
@@ -473,6 +530,96 @@ class DLSlabServer:
         for client_id in client_ids:
             results[client_id] = self.wol_manager.wake(client_id)
         return results
+
+    # ------------------------------------------------------------------
+    # Teacher remote control
+    # ------------------------------------------------------------------
+
+    async def start_teacher_control(
+        self,
+        client_id: str,
+        on_frame: Callable[[str], None],
+    ) -> None:
+        """Iniciar modo control remoto del profesor sobre un estudiante.
+
+        Envía ``REQUEST_HIRES_SCREENSHOT`` al cliente con parámetros optimizados
+        para control remoto (mayor FPS, menor resolución) en lugar de los
+        valores del modo presentación de clase.
+
+        Args:
+            client_id: Cliente objetivo (estudiante a controlar).
+            on_frame:  Callable ``(frame_b64: str) -> None`` invocado cada vez
+                       que llega un frame hires del estudiante.
+        """
+        from client.agent import (
+            REMOTE_CTRL_FPS,
+            REMOTE_CTRL_QUALITY,
+            REMOTE_CTRL_WIDTH,
+            REMOTE_CTRL_HEIGHT,
+        )
+
+        # Si había una sesión activa anterior, detenerla limpiamente primero.
+        if self._teacher_control_client_id:
+            await self.stop_teacher_control()
+
+        self._teacher_control_client_id = client_id
+        self._on_teacher_control_frame = on_frame
+        await self.send_to_client(
+            client_id,
+            make_request_hires_screenshot(
+                "server",
+                fps=REMOTE_CTRL_FPS,
+                quality=REMOTE_CTRL_QUALITY,
+                width=REMOTE_CTRL_WIDTH,
+                height=REMOTE_CTRL_HEIGHT,
+            ),
+        )
+        logger.info(
+            "Teacher control started — target=%s  %dx%d q=%d @%d FPS",
+            client_id,
+            REMOTE_CTRL_WIDTH,
+            REMOTE_CTRL_HEIGHT,
+            REMOTE_CTRL_QUALITY,
+            REMOTE_CTRL_FPS,
+        )
+
+    async def stop_teacher_control(self) -> None:
+        """Detener el modo control remoto del profesor.
+
+        Envía ``STOP_HIRES_SCREENSHOT`` al cliente activo y limpia el estado.
+        Es seguro llamarlo aunque no haya ninguna sesión activa.
+        """
+        if self._teacher_control_client_id:
+            await self.send_to_client(
+                self._teacher_control_client_id,
+                make_stop_hires_screenshot("server"),
+            )
+            logger.info(
+                "Teacher control stopped — was targeting %s",
+                self._teacher_control_client_id,
+            )
+        self._teacher_control_client_id = None
+        self._on_teacher_control_frame = None
+
+    async def send_remote_input(
+        self,
+        client_id: str,
+        event_type: str,
+        event_data: dict[str, Any],
+    ) -> bool:
+        """Enviar un evento de entrada remota (mouse o teclado) a un cliente.
+
+        Args:
+            client_id:  Cliente que ejecutará el evento.
+            event_type: Tipo de evento: ``mouse_move``, ``mouse_click``,
+                        ``key_press`` o ``key_release``.
+            event_data: Parámetros del evento (coordenadas, tecla, etc.).
+
+        Returns:
+            ``True`` si el mensaje fue enviado, ``False`` en caso contrario.
+        """
+        msg = make_remote_input("server", client_id, event_type, event_data)
+        return await self.send_to_client(client_id, msg)
 
     def _resolve_targets(self, client_ids: list[str] | None) -> list[str]:
         """Resolve target client IDs from optional explicit list."""
@@ -584,15 +731,22 @@ class DLSlabServer:
         hostname = message.payload.get("hostname", message.client_id)
         ip = message.payload.get("ip", peer_ip)
         mac = str(message.payload.get("mac", "")).strip()
-        self.clients.register(message.client_id, hostname, ip, mac, writer)
+        sw = int(message.payload.get("screen_width", 0) or 0)
+        sh = int(message.payload.get("screen_height", 0) or 0)
+        self.clients.register(
+            message.client_id, hostname, ip, mac, writer,
+            screen_width=sw, screen_height=sh,
+        )
         if mac:
             self.wol_manager.register_mac(message.client_id, mac)
         logger.info(
-            "REGISTER  client_id=%s  hostname=%s  ip=%s  mac=%s",
+            "REGISTER  client_id=%s  hostname=%s  ip=%s  mac=%s  screen=%dx%d",
             message.client_id,
             hostname,
             ip,
             mac or "unknown",
+            sw,
+            sh,
         )
 
     async def _handle_client_mac(
@@ -621,12 +775,21 @@ class DLSlabServer:
         is_hires: bool = bool(message.payload.get("hires", False))
 
         if is_hires:
-            # High-resolution frame from the presenter — relay to audience.
+            # High-resolution frame del presentador — relay a la audiencia.
             if (
                 self._student_streamer.is_streaming
                 and message.client_id == self._student_streamer.presenter_id
             ):
                 await self._student_streamer.relay_frame(image_b64)
+                # También entregarlo al profesor si hay un callback registrado.
+                if self._on_student_frame is not None:
+                    self._on_student_frame(image_b64)
+            # Control remoto del profesor — enviar frame solo al profesor.
+            if (
+                self._teacher_control_client_id == message.client_id
+                and self._on_teacher_control_frame is not None
+            ):
+                self._on_teacher_control_frame(image_b64)
         else:
             # Normal thumbnail — pass to the UI callback.
             logger.debug(

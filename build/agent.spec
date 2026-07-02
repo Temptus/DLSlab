@@ -1,9 +1,14 @@
 # agent.spec
+import os
 block_cipher = None
 
+# SPECPATH apunta al directorio del spec (build\).
+# Usamos el directorio padre para referenciar el resto del proyecto.
+_root = os.path.abspath(os.path.join(SPECPATH, '..'))
+
 a = Analysis(
-    ['client/agent.py'],
-    pathex=['.'],
+    [os.path.join(_root, 'client', 'agent.py')],
+    pathex=[_root],
     binaries=[],
     datas=[],
     hiddenimports=[
@@ -21,6 +26,7 @@ a = Analysis(
         'asyncio',
         'ctypes',
         'winreg',
+        'configparser',
     ],
     hookspath=[],
     hooksconfig={},
@@ -47,7 +53,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,        # Sin ventana de consola
@@ -56,6 +62,6 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    uac_admin=True,       # El agente REQUIERE permisos de administrador
-    icon=None,
+    uac_admin=False,       # El agente REQUIERE permisos de administrador
+    icon=os.path.join(_root, 'icon.ico'),
 )

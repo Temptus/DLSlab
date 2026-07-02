@@ -1,5 +1,5 @@
 """
-server/protocol.py
+server/protocol.py Yan
 ==================
 Low-level helpers for framing and parsing DLSlab messages over a TCP stream.
 
@@ -18,13 +18,18 @@ from shared.messages import Message
 
 logger = logging.getLogger(__name__)
 
-# Maximum size of a single incoming message (10 MB).
-# This protects against runaway clients sending huge screenshots.
-MAX_MESSAGE_BYTES: int = 10 * 1024 * 1024
+# Maximum size of a single incoming message (50 MB).
+# Increased from 10 MB to support SEND_FILE transfers of large documents.
+MAX_MESSAGE_BYTES: int = 50 * 1024 * 1024
 
 
 async def read_message(reader: asyncio.StreamReader) -> Message | None:
     """Read and parse a single newline-terminated message from *reader*.
+
+    Unknown message types (e.g. new features not yet deployed to this node)
+    are silently discarded and reading continues, so the connection is never
+    dropped due to a version mismatch.  ``None`` is returned only when the
+    remote side has actually closed the connection.
 
     Args:
         reader: The :class:`asyncio.StreamReader` for an open connection.
@@ -32,22 +37,27 @@ async def read_message(reader: asyncio.StreamReader) -> Message | None:
     Returns:
         A parsed :class:`~shared.messages.Message`, or ``None`` when the
         remote side has closed the connection.
-
-    Raises:
-        ValueError: When the payload is malformed JSON or an unknown type.
     """
-    try:
-        raw: bytes = await reader.readuntil(b"\n")
-    except asyncio.IncompleteReadError:
-        return None
-    except ConnectionResetError:
-        return None
+    while True:
+        try:
+            raw: bytes = await reader.readuntil(b"\n")
+        except asyncio.IncompleteReadError:
+            return None
+        except ConnectionResetError:
+            return None
 
-    if len(raw) > MAX_MESSAGE_BYTES:
-        logger.warning("Oversized message received (%d bytes) — discarding.", len(raw))
-        return None
+        if len(raw) > MAX_MESSAGE_BYTES:
+            logger.warning(
+                "Oversized message received (%d bytes) — discarding.", len(raw)
+            )
+            return None
 
-    return Message.from_json(raw.decode("utf-8").strip())
+        try:
+            return Message.from_json(raw.decode("utf-8").strip())
+        except ValueError as exc:
+            # Unknown or unsupported message type — skip and keep reading.
+            logger.warning("Unrecognised message discarded: %s", exc)
+            continue
 
 
 async def write_message(writer: asyncio.StreamWriter, message: Message) -> None:

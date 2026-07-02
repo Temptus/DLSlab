@@ -1,0 +1,1368 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>DLSlab — Ayuda Consola del Profesor</title>
+    <style>
+        :root {
+            --primary: #ba0c2f;
+            --primary-dark: #8c0922;
+            --primary-light: #f5e6e9;
+            --text: #1a1a1a;
+            --text-muted: #555;
+            --border: #ddd;
+            --bg: #fafafa;
+            --white: #ffffff;
+            --code-bg: #f4f4f4;
+            --warn-bg: #fff8e1;
+            --warn-border: #f9a825;
+            --tip-bg: #e8f5e9;
+            --tip-border: #43a047;
+            --info-bg: #e3f2fd;
+            --info-border: #1976d2;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            font-size: 15px;
+            color: var(--text);
+            background: var(--bg);
+            line-height: 1.7;
+        }
+
+        /* Layout */
+        .wrapper {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        nav#sidebar {
+            width: 270px;
+            min-width: 270px;
+            background: var(--white);
+            border-right: 1px solid var(--border);
+            padding: 24px 0;
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            overflow-y: auto;
+        }
+
+        nav#sidebar .logo {
+            padding: 0 20px 20px;
+            border-bottom: 2px solid var(--primary);
+            margin-bottom: 16px;
+        }
+
+        nav#sidebar .logo h1 {
+            font-size: 20px;
+            color: var(--primary);
+            font-weight: 700;
+        }
+
+        nav#sidebar .logo p {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        nav#sidebar ul {
+            list-style: none;
+        }
+
+        nav#sidebar ul li a {
+            display: block;
+            padding: 8px 20px;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 13px;
+            transition: all .15s;
+            border-left: 3px solid transparent;
+        }
+
+        nav#sidebar ul li a:hover,
+        nav#sidebar ul li a.active {
+            color: var(--primary);
+            background: var(--primary-light);
+            border-left-color: var(--primary);
+        }
+
+        nav#sidebar ul li.section-title {
+            padding: 14px 20px 4px;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            color: #999;
+        }
+
+        main#content {
+            flex: 1;
+            padding: 40px 48px;
+            max-width: 900px;
+        }
+
+        /* Typography */
+        h1 {
+            font-size: 32px;
+            color: var(--primary);
+            margin-bottom: 8px;
+        }
+
+        h2 {
+            font-size: 22px;
+            color: var(--primary-dark);
+            margin: 48px 0 12px;
+            padding-bottom: 6px;
+            border-bottom: 2px solid var(--primary-light);
+        }
+
+        h3 {
+            font-size: 17px;
+            color: var(--text);
+            margin: 28px 0 8px;
+            font-weight: 600;
+        }
+
+        h4 {
+            font-size: 15px;
+            margin: 20px 0 6px;
+            font-weight: 600;
+        }
+
+        p {
+            margin-bottom: 14px;
+        }
+
+        ul, ol {
+            padding-left: 24px;
+            margin-bottom: 14px;
+        }
+
+        li {
+            margin-bottom: 6px;
+        }
+
+        a {
+            color: var(--primary);
+        }
+
+        strong {
+            color: var(--primary-dark);
+        }
+
+        /* Code */
+        code {
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 1px 6px;
+            font-size: 13px;
+            font-family: 'Consolas', 'Courier New', monospace;
+        }
+
+        pre {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            border-radius: 6px;
+            padding: 16px 20px;
+            overflow-x: auto;
+            font-size: 13px;
+            margin-bottom: 16px;
+            line-height: 1.5;
+        }
+
+        pre code {
+            background: none;
+            border: none;
+            color: inherit;
+        }
+
+        /* Callouts */
+        .callout {
+            border-radius: 6px;
+            padding: 14px 18px;
+            margin: 16px 0;
+            border-left: 4px solid;
+        }
+
+        .callout.warn {
+            background: var(--warn-bg);
+            border-color: var(--warn-border);
+        }
+
+        .callout.tip {
+            background: var(--tip-bg);
+            border-color: var(--tip-border);
+        }
+
+        .callout.info {
+            background: var(--info-bg);
+            border-color: var(--info-border);
+        }
+
+        .callout .title {
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .callout.warn .title {
+            color: #e65100;
+        }
+
+        .callout.tip .title {
+            color: #2e7d32;
+        }
+
+        .callout.info .title {
+            color: #1565c0;
+        }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        th {
+            background: var(--primary);
+            color: white;
+            padding: 10px 14px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        td {
+            padding: 9px 14px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        tr:nth-child(even) td {
+            background: #f9f0f2;
+        }
+
+        /* Toolbar reference cards */
+        .toolbar-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .toolbar-card {
+            background: var(--white);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px;
+        }
+
+        .toolbar-card .icon {
+            font-size: 24px;
+        }
+
+        .toolbar-card h4 {
+            margin: 8px 0 4px;
+            font-size: 14px;
+        }
+
+        .toolbar-card p {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin: 0;
+        }
+
+        /* Steps */
+        .steps {
+            counter-reset: step;
+            padding: 0;
+            list-style: none;
+        }
+
+        .steps li {
+            counter-increment: step;
+            position: relative;
+            padding: 12px 12px 12px 52px;
+            margin-bottom: 8px;
+            background: var(--white);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+        }
+
+        .steps li::before {
+            content: counter(step);
+            position: absolute;
+            left: 14px;
+            top: 12px;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--primary);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 13px;
+        }
+
+        /* Badge indicators */
+        .badge {
+            display: inline-block;
+            border-radius: 4px;
+            padding: 2px 8px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .badge.green {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .badge.red {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .badge.blue {
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+
+        .badge.orange {
+            background: #fff3e0;
+            color: #e65100;
+        }
+
+        /* FAQ */
+        details {
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            margin-bottom: 10px;
+            overflow: hidden;
+        }
+
+        summary {
+            padding: 12px 16px;
+            cursor: pointer;
+            font-weight: 600;
+            background: var(--white);
+            list-style: none;
+        }
+
+        summary::-webkit-details-marker {
+            display: none;
+        }
+
+        summary::before {
+            content: '▶ ';
+            color: var(--primary);
+            font-size: 11px;
+        }
+
+        details[open] summary::before {
+            content: '▼ ';
+        }
+
+        details[open] summary {
+            border-bottom: 1px solid var(--border);
+        }
+
+        details .faq-body {
+            padding: 14px 16px;
+            background: var(--white);
+        }
+
+        /* Keyboard shortcuts */
+        kbd {
+            display: inline-block;
+            background: #f0f0f0;
+            border: 1px solid #ccc;
+            border-bottom: 3px solid #aaa;
+            border-radius: 4px;
+            padding: 2px 8px;
+            font-size: 12px;
+            font-family: monospace;
+        }
+
+        /* Hero */
+        .hero {
+            background: linear-gradient(135deg, var(--primary) 0%, #6b0117 100%);
+            color: white;
+            border-radius: 10px;
+            padding: 30px 32px;
+            margin-bottom: 36px;
+        }
+
+        .hero h1 {
+            color: white;
+            font-size: 28px;
+        }
+
+        .hero p {
+            color: rgba(255, 255, 255, .85);
+            margin: 8px 0 0;
+            font-size: 16px;
+        }
+
+        /* Footer */
+        footer {
+            margin-top: 60px;
+            padding: 24px;
+            border-top: 1px solid var(--border);
+            color: var(--text-muted);
+            font-size: 13px;
+            text-align: center;
+        }
+
+        /* TOC anchor offset */
+        section {
+            scroll-margin-top: 24px;
+        }
+
+        @media (max-width: 768px) {
+            .wrapper {
+                flex-direction: column;
+            }
+
+            nav#sidebar {
+                width: 100%;
+                height: auto;
+                position: static;
+            }
+
+            main#content {
+                padding: 24px 20px;
+            }
+        }
+
+        .logo {
+            display: block;
+            width: 100%;
+        }
+
+        .imagen {
+            width: 100%;
+            max-width: 100%;
+            height: auto;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+<div class="wrapper">
+
+    <!-- ===================== SIDEBAR ===================== -->
+    <nav id="sidebar">
+        <div class="logo">
+            <a href="ayuda.html"><img src="logo.png" alt="dlslab logo" class="logo"></a>
+            <p>Ayuda — Consola del Profesor</p>
+        </div>
+        <ul>
+            <li class="section-title">Inicio</li>
+            <li><a href="#intro">¿Qué es DLSlab?</a></li>
+            <li><a href="#inicio-rapido">Inicio rápido</a></li>
+            <li class="section-title">Funciones</li>
+            <li><a href="#interfaz">Interfaz principal</a></li>
+            <li><a href="#monitor">Monitor de estudiantes</a></li>
+            <li><a href="#bloqueo">Bloqueo de pantallas</a></li>
+            <li><a href="#transmision">Transmisión de pantalla</a></li>
+            <li><a href="#control-remoto">Control remoto</a></li>
+            <li><a href="#politicas">Políticas de Apps y Web</a></li>
+            <li><a href="#energia">Control de energía</a></li>
+            <li><a href="#ejecucion">Ejecución remota</a></li>
+            <li><a href="#wol">Wake-on-LAN</a></li>
+            <li><a href="#envio-archivos">Envío de archivos</a></li>
+            <li><a href="#log">Registro de violaciones</a></li>
+            <li class="section-title">Referencia</li>
+            <li><a href="#procedimientos">Procedimientos paso a paso</a></li>
+            <li><a href="#faq">Preguntas frecuentes</a></li>
+            <li><a href="#troubleshooting">Solución de problemas</a></li>
+            <li><a href="#glosario">Glosario</a></li>
+            <li><a href="#atajos">Atajos y consejos</a></li>
+            <li><a href="#soporte">Soporte</a></li>
+            <li><a href="ayuda_agente.html">Ayuda — Agente del Estudiante</a></li>
+        </ul>
+    </nav>
+
+    <!-- ===================== CONTENIDO ===================== -->
+    <main id="content">
+
+        <!-- HERO -->
+        <div class="hero">
+            <h1>🖥️ DLSlab — Consola del Profesor</h1>
+            <p>Manual de usuario · Versión 1.0</p>
+        </div>
+
+        <!-- ── INTRODUCCIÓN ── -->
+        <section id="intro">
+            <h2>¿Qué es DLSlab?</h2>
+            <p>
+                <strong>DLSlab</strong> es un sistema de gestión de laboratorios informáticos diseñado
+                para <strong>profesores y técnicos de TI</strong> en entornos educativos. Permite
+                supervisar en tiempo real las pantallas de todos los estudiantes conectados a la red
+                local, tomar control remoto de cualquier equipo, transmitir la pantalla del profesor,
+                aplicar restricciones de aplicaciones y navegación web, y gestionar el encendido y
+                apagado de todo el laboratorio desde un único punto de control.
+            </p>
+            <p>
+                La <strong>Consola del Profesor</strong> (<code>DLSlab_Server.exe</code>) es la
+                aplicación que se instala en el equipo del docente. Los equipos de los estudiantes
+                ejecutan el <strong>Agente</strong> (<code>DLSlab_Agent.exe</code>), que se conecta
+                automáticamente al servidor.
+            </p>
+            <table>
+                <tr>
+                    <th>Componente</th>
+                    <th>Equipo</th>
+                    <th>Archivo</th>
+                </tr>
+                <tr>
+                    <td>Consola del Profesor (Servidor)</td>
+                    <td>PC del docente</td>
+                    <td><code>DLSlab_Server.exe</code></td>
+                </tr>
+                <tr>
+                    <td>Agente del Estudiante</td>
+                    <td>Cada PC del laboratorio</td>
+                    <td><code>DLSlab_Agent.exe</code></td>
+                </tr>
+            </table>
+            <div class="callout info">
+                <div class="title">ℹ️ Requisitos</div>
+                Windows 10 / 11 · Todos los equipos en la misma red local (LAN).
+                No se requiere conexión a Internet para operar.
+            </div>
+        </section>
+
+        <!-- ── INICIO RÁPIDO ── -->
+        <section id="inicio-rapido">
+            <h2>Guía de inicio rápido</h2>
+
+            <h3>1. Instalar la Consola del Profesor</h3>
+            <ol class="steps">
+                <li>Ejecuta <code>DLSlab_Server_Setup_v1.0.exe</code> como <strong>Administrador</strong>.</li>
+                <li>Sigue el asistente de instalación. Se creará automáticamente una regla de Firewall
+                    de Windows para el puerto TCP 9000.
+                </li>
+                <li>Al finalizar encontrarás el acceso directo <strong>DLSlab Server</strong> en tu
+                    Escritorio y en el Menú de Inicio.
+                </li>
+            </ol>
+
+            <h3>2. Instalar el Agente en los equipos de los estudiantes</h3>
+            <p>Consulta la <strong>Guía del Agente</strong> (<code>ayuda_agente.html</code>) para
+                las instrucciones de instalación en los PCs del laboratorio.</p>
+
+            <h3>3. Iniciar la sesión</h3>
+            <ol class="steps">
+                <li>Abre <strong>DLSlab Server</strong> desde tu Escritorio o Menú de Inicio.</li>
+                <li>La barra de estado inferior mostrará: <em>"Servidor activo — 0 Estudiante(s) conectado(s)"</em>.
+                </li>
+                <li>Cuando los estudiantes enciendan sus equipos (o inicien sesión), sus miniaturas
+                    aparecerán automáticamente en la cuadrícula central.
+                </li>
+                <li>¡Listo! Ya puedes supervisar y controlar el laboratorio.</li>
+            </ol>
+
+            <div class="callout tip">
+                <div class="title">💡 Consejo</div>
+                Asegúrate de que el Firewall de Windows no bloquee el puerto <strong>9000 TCP</strong>
+                en la PC del profesor. El instalador lo configura automáticamente, pero una política de
+                dominio podría revertirlo.
+            </div>
+        </section>
+
+        <!-- ── INTERFAZ PRINCIPAL ── -->
+        <section id="interfaz">
+            <h2>Interfaz principal</h2>
+            <p>La ventana principal de DLSlab tiene tres áreas:</p>
+            <table>
+                <tr>
+                    <th>Área</th>
+                    <th>Descripción</th>
+                </tr>
+                <tr>
+                    <td><strong>1- Barra de menús</strong></td>
+                    <td>Acceso a Archivo (temas) y Ayuda.</td>
+                </tr>
+                <tr>
+                    <td><strong>2- Barra de herramientas</strong></td>
+                    <td>Botones de acción rápida para las funciones principales.</td>
+                </tr>
+                <tr>
+                    <td><strong>3- Cuadrícula de miniaturas</strong></td>
+                    <td>Vista en tiempo real de la pantalla de cada estudiante conectado.</td>
+                </tr>
+                <tr>
+                    <td><strong>4- Barra de estado</strong></td>
+                    <td>Muestra el número de estudiantes conectados y el estado del servidor.</td>
+                </tr>
+            </table>
+
+            <div>
+                <img class="imagen" src="main_window.png" alt="Ventana principal de DLSlab">
+            </div>
+
+            <h3>Barra de herramientas — referencia rápida</h3>
+            <div class="toolbar-grid">
+                <div class="toolbar-card">
+                    <div class="icon">🔒</div>
+                    <h4>Bloquear pantalla</h4>
+                    <p>Muestra una pantalla negra con mensaje en los equipos seleccionados.</p></div>
+                <div class="toolbar-card">
+                    <div class="icon">🔓</div>
+                    <h4>Desbloquear</h4>
+                    <p>Quita el bloqueo de todos los equipos bloqueados.</p></div>
+                <div class="toolbar-card">
+                    <div class="icon">📡</div>
+                    <h4>Transmitir mi pantalla</h4>
+                    <p>Muestra la pantalla del profesor en los equipos del laboratorio.</p></div>
+                <div class="toolbar-card">
+                    <div class="icon">⏹️</div>
+                    <h4>Detener transmisión</h4>
+                    <p>Detiene la transmisión de pantalla activa (profesor o estudiante).</p></div>
+                <div class="toolbar-card">
+                    <div class="icon">🛡️</div>
+                    <h4>Políticas</h4>
+                    <p>Configura restricciones de aplicaciones y navegación web.</p></div>
+                <div class="toolbar-card">
+                    <div class="icon">⚡</div>
+                    <h4>Control de energía</h4>
+                    <p>Apagado, reinicio, bloqueo, logout, URLs, apps y Wake-on-LAN.</p></div>
+                <div class="toolbar-card">
+                    <div class="icon">⏻</div>
+                    <h4>Apagado de emergencia</h4>
+                    <p>Apaga todo el laboratorio con confirmación.</p></div>
+                <div class="toolbar-card">
+                    <div class="icon">📤</div>
+                    <h4>Enviar archivo</h4>
+                    <p>Envía un documento al Escritorio de los estudiantes.</p></div>
+                <div class="toolbar-card">
+                    <div class="icon">📋</div>
+                    <h4>Registro de políticas</h4>
+                    <p>Ver log de violaciones de política reportadas por los agentes.</p></div>
+            </div>
+        </section>
+
+        <!-- ── MONITOR ── -->
+        <section id="monitor">
+            <h2>Monitor de estudiantes</h2>
+            <p>
+                La cuadrícula central muestra una miniatura en tiempo real (actualizada cada 2 segundos)
+                de la pantalla de cada estudiante conectado. El nombre del equipo aparece debajo de
+                cada miniatura.
+            </p>
+
+            <h3>Indicadores visuales en las miniaturas</h3>
+            <table>
+                <tr>
+                    <th>Indicador</th>
+                    <th>Significado</th>
+                </tr>
+                <tr>
+                    <td><span class="badge green">● Verde</span> (punto)</td>
+                    <td>Estudiante conectado y activo.</td>
+                </tr>
+                <tr>
+                    <td><span class="badge red">● Rojo</span> (punto)</td>
+                    <td>Estudiante desconectado o apagado.</td>
+                </tr>
+                <tr>
+                    <td><span class="badge red">🔒 Bloqueado</span></td>
+                    <td>La pantalla del estudiante está bloqueada.</td>
+                </tr>
+                <tr>
+                    <td><span class="badge blue">📡 EN VIVO</span></td>
+                    <td>El estudiante está recibiendo la pantalla del profesor.</td>
+                </tr>
+                <tr>
+                    <td><span class="badge green">🎤 PRESENTANDO</span></td>
+                    <td>Este estudiante está presentando su pantalla a la clase.</td>
+                </tr>
+                <tr>
+                    <td><span class="badge blue">👁️ VIENDO</span></td>
+                    <td>Este estudiante está viendo la presentación de un compañero.</td>
+                </tr>
+                <tr>
+                    <td><span class="badge green">🟢 APP</span></td>
+                    <td>Política de apps activa: Lista Blanca (solo apps permitidas).</td>
+                </tr>
+                <tr>
+                    <td><span class="badge red">🔴 APP</span></td>
+                    <td>Política de apps activa: Lista Negra (apps prohibidas).</td>
+                </tr>
+                <tr>
+                    <td><span class="badge red">🚫 WEB</span></td>
+                    <td>Navegación web bloqueada o con restricción activa.</td>
+                </tr>
+                <tr>
+                    <td><span class="badge green">✅ WEB</span></td>
+                    <td>Lista blanca de URLs activa.</td>
+                </tr>
+            </table>
+
+            <h3>Menú contextual (clic derecho sobre miniatura)</h3>
+            <ul>
+                <li><strong>Bloquear pantalla</strong> — Bloquea solo ese equipo.</li>
+                <li><strong>Desbloquear pantalla</strong> — Quita el bloqueo de ese equipo.</li>
+                <li><strong>Presentar pantalla</strong> — Muestra la pantalla de ese estudiante a toda la clase.</li>
+                <li><strong>Control remoto</strong> — Toma el control del teclado y ratón de ese equipo.</li>
+                <li><strong>Enviar archivo</strong> — Envía un documento directamente a ese estudiante.</li>
+                <li><strong>Wake-on-LAN</strong> — Enciende el equipo si está apagado (requiere MAC registrada).</li>
+            </ul>
+
+            <div class="callout info">
+                <div class="title">ℹ️ Nota</div>
+                El menú contextual se deshabilita mientras está activa una transmisión de pantalla
+                o una sesión de control remoto.
+            </div>
+        </section>
+
+        <!-- ── BLOQUEO ── -->
+        <section id="bloqueo">
+            <h2>Bloqueo de pantallas</h2>
+            <p>
+                Esta función muestra una superposición de pantalla negra en los equipos seleccionados,
+                impidiendo que los estudiantes interactúen con sus equipos. Útil para captar la
+                atención o durante evaluaciones.
+            </p>
+
+            <h3>Bloquear pantallas</h3>
+            <ol class="steps">
+                <li>Haz clic en el botón <strong>🔒 Bloquear pantalla</strong> en la barra de herramientas.</li>
+                <li>Elige si aplicar a <em>Todos</em> o a una selección de estudiantes.</li>
+                <li>Escribe un mensaje opcional que verán los estudiantes (ej. <em>"Atención a la pizarra"</em>).</li>
+                <li>Haz clic en <strong>Aplicar</strong>. Las miniaturas mostrarán el ícono 🔒.</li>
+            </ol>
+
+            <img src="block.png" alt="Bloqueo de pantalla">
+
+            <h3>Desbloquear pantallas</h3>
+            <ul>
+                <li><strong>Desbloquear todo:</strong> Botón <strong>🔓</strong> en la barra de herramientas → desbloquea
+                    todos los equipos bloqueados a la vez.
+                </li>
+                <li><strong>Desbloquear uno:</strong> Clic derecho en la miniatura del estudiante → <em>Desbloquear
+                    pantalla</em>.
+                </li>
+            </ul>
+
+            <div class="callout warn">
+                <div class="title">⚠️ Importante</div>
+                El bloqueo de pantalla no cierra ni guarda el trabajo de los estudiantes. Se recomienda
+                avisar a los alumnos antes de activarlo para que guarden sus archivos.
+            </div>
+        </section>
+
+        <!-- ── TRANSMISIÓN ── -->
+        <section id="transmision">
+            <h2>Transmisión de pantalla</h2>
+
+            <h3>Mostrar mi pantalla a los estudiantes</h3>
+            <p>Transmite en tiempo real la pantalla del profesor a los equipos seleccionados.</p>
+            <ol class="steps">
+                <li>Haz clic en <strong>📡 Transmitir mi pantalla</strong> en la barra de herramientas.</li>
+                <li>Selecciona los estudiantes destinatarios (todos o una selección).</li>
+                <li>Ajusta los parámetros: <strong>FPS</strong> (cuadros por segundo) y <strong>Calidad</strong> JPEG.
+                </li>
+                <li>Haz clic en <strong>Iniciar</strong>. El indicador <em>🔴 EN VIVO</em> aparecerá en la barra.</li>
+                <li>Para detener, haz clic en <strong>⏹️ Detener transmisión</strong>.</li>
+            </ol>
+
+            <h3>Mostrar la pantalla de un estudiante a la clase</h3>
+            <p>Presenta el trabajo de un alumno en los demás equipos del laboratorio.</p>
+            <ol class="steps">
+                <li>Haz <strong>clic derecho</strong> sobre la miniatura del estudiante que presentará.</li>
+                <li>Selecciona <strong>Presentar pantalla</strong>.</li>
+                <li>La miniatura del presentador mostrará <em>🎤 PRESENTANDO</em> y las de los demás <em>👁️ VIENDO</em>.
+                </li>
+                <li>Para detener, haz clic en <strong>⏹ Detener presentación</strong> en la barra.</li>
+            </ol>
+
+            <div class="callout tip">
+                <div class="title">💡 Rendimiento</div>
+                Para redes lentas o muchos estudiantes, reduce el FPS a 5 y la calidad a 50-60%.
+                Para presentaciones de alta fidelidad con pocos alumnos, usa 10 FPS y calidad 80%.
+            </div>
+        </section>
+
+        <!-- ── CONTROL REMOTO ── -->
+        <section id="control-remoto">
+            <h2>Control remoto</h2>
+            <p>
+                Permite al profesor tomar el control completo del teclado y ratón de un equipo
+                estudiante sin desplazarse físicamente. Útil para asistencia técnica o demostraciones
+                individualizadas.
+            </p>
+            <ol class="steps">
+                <li>Haz <strong>clic derecho</strong> sobre la miniatura del estudiante.</li>
+                <li>Selecciona <strong>Control remoto</strong>.</li>
+                <li>Se abrirá una ventana con la pantalla del estudiante en alta resolución.</li>
+                <li>Mueve el ratón y escribe normalmente — los eventos se envían al equipo del estudiante.</li>
+                <li>Cierra la ventana de control remoto para liberar el equipo.</li>
+            </ol>
+            <div class="callout warn">
+                <div class="title">⚠️ Aviso</div>
+                Durante el control remoto no se pueden iniciar otras transmisiones. El estudiante
+                puede ver todos los movimientos del ratón y teclas en tiempo real.
+            </div>
+        </section>
+
+        <!-- ── POLÍTICAS ── -->
+        <section id="politicas">
+            <h2>Políticas de aplicaciones y web</h2>
+            <p>
+                Permiten restringir qué aplicaciones pueden ejecutar los estudiantes y qué
+                sitios web pueden visitar durante la clase.
+            </p>
+
+            <h3>Abrir el diálogo de políticas</h3>
+            <p>Haz clic en <strong>🛡️ Políticas</strong> en la barra de herramientas.</p>
+            <img src="policy.png" alt="políticas de aplicaciones y web">
+
+
+            <h3>Pestaña Aplicaciones</h3>
+            <table>
+                <tr>
+                    <th>Modo</th>
+                    <th>Comportamiento</th>
+                </tr>
+                <tr>
+                    <td><span class="badge green">Sin restricciones</span></td>
+                    <td>Los estudiantes pueden usar cualquier aplicación.</td>
+                </tr>
+                <tr>
+                    <td><span class="badge orange">Lista Blanca</span></td>
+                    <td>Solo las aplicaciones listadas están permitidas. El resto se cierra automáticamente.</td>
+                </tr>
+                <tr>
+                    <td><span class="badge red">Lista Negra</span></td>
+                    <td>Las aplicaciones listadas están prohibidas. Se cierran automáticamente si se abren.</td>
+                </tr>
+            </table>
+            <p>
+                Escribe los nombres de proceso (<code>chrome.exe</code>, <code>notepad.exe</code>) o
+                usa los <strong>botones de acceso rápido</strong> (Chrome, Firefox, Word, Excel, etc.).
+            </p>
+
+            <h3>Pestaña Web</h3>
+            <table>
+                <tr>
+                    <th>Modo</th>
+                    <th>Comportamiento</th>
+                </tr>
+                <tr>
+                    <td><span class="badge green">Sin restricciones</span></td>
+                    <td>Navegación libre.</td>
+                </tr>
+                <tr>
+                    <td><span class="badge red">Bloquear toda navegación</span></td>
+                    <td>Ningún sitio web es accesible.</td>
+                </tr>
+                <tr>
+                    <td><span class="badge orange">Solo URLs permitidas</span></td>
+                    <td>Solo los sitios listados son accesibles. El resto queda bloqueado.</td>
+                </tr>
+            </table>
+            <p>
+                Ingresa las URLs completas o usa los accesos rápidos (Google Classroom, Office 365, etc.).
+            </p>
+
+            <div class="callout warn">
+                <div class="title">⚠️ Requisito</div>
+                Las restricciones web modifican el archivo <code>hosts</code> del sistema. El agente
+                debe ejecutarse con <strong>permisos de Administrador</strong> para que esta función
+                opere correctamente.
+            </div>
+
+            <h3>Aplicar a todos o a una selección</h3>
+            <p>
+                Usa el selector <em>Todos / Selección múltiple</em> para aplicar la política globalmente
+                o solo a ciertos equipos. Mantén <kbd>Ctrl</kbd> para seleccionar múltiples estudiantes.
+            </p>
+
+            <h3>Limpiar todas las políticas</h3>
+            <p>
+                Haz clic en <strong>Limpiar Todo</strong> para eliminar todas las restricciones activas
+                de aplicaciones y web en todos los equipos.
+            </p>
+        </section>
+
+        <!-- ── ENERGÍA ── -->
+        <section id="energia">
+            <h2>Control de energía</h2>
+            <p>
+                Haz clic en <strong>⚡ Energía</strong> en la barra de herramientas para abrir el
+                diálogo de control de energía.
+            </p>
+            <img src="energy.png" alt="Control de energía">
+            <table>
+                <tr>
+                    <th>Acción</th>
+                    <th>Descripción</th>
+                </tr>
+                <tr>
+                    <td><strong>Apagar Todo</strong> 🔴</td>
+                    <td>Inicia el apagado de los equipos seleccionados tras el delay configurado.</td>
+                </tr>
+                <tr>
+                    <td><strong>Reiniciar Todo</strong> 🟠</td>
+                    <td>Reinicia los equipos seleccionados tras el delay.</td>
+                </tr>
+                <tr>
+                    <td><strong>Bloquear Estaciones</strong> 🟢</td>
+                    <td>Ejecuta "Bloquear estación de trabajo" en Windows (pantalla de bloqueo del SO).</td>
+                </tr>
+                <tr>
+                    <td><strong>Cerrar Sesión</strong></td>
+                    <td>Cierra la sesión del usuario activo en los equipos seleccionados.</td>
+                </tr>
+            </table>
+            <p>
+                El campo <strong>Delay (segundos)</strong> (por defecto: 5 s) define cuánto tiempo
+                tienen los estudiantes para guardar su trabajo antes de que se ejecute la acción.
+            </p>
+
+            <h3>Apagado de emergencia rápido</h3>
+            <p>
+                El botón <strong>⏻</strong> de la barra de herramientas apaga todo el laboratorio
+                directamente (con un paso de confirmación) con un delay de 5 segundos.
+            </p>
+        </section>
+
+        <!-- ── EJECUCIÓN REMOTA ── -->
+        <section id="ejecucion">
+            <h2>Ejecución remota</h2>
+            <p>
+                Desde el diálogo de <strong>⚡ Energía</strong>, en la sección
+                <em>🌐 Ejecución Remota</em>, puedes:
+            </p>
+
+            <h3>Abrir URL en los equipos de los estudiantes</h3>
+            <ol class="steps">
+                <li>Escribe la URL en el campo de texto o usa un <strong>acceso rápido</strong>
+                    (Office 365, Google Classroom, Gmetrix, Certiport, etc.).
+                </li>
+                <li>Haz clic en <strong>Abrir URL en todos</strong>.</li>
+            </ol>
+
+            <h3>Ejecutar una aplicación en los equipos</h3>
+            <ol class="steps">
+                <li>Escribe la ruta completa del ejecutable o haz clic en <strong>📂</strong> para buscarlo.</li>
+                <li>Añade argumentos si la aplicación los requiere (campo <em>Argumentos</em>).</li>
+                <li>Haz clic en <strong>Ejecutar App</strong>.</li>
+            </ol>
+
+            <div class="callout info">
+                <div class="title">ℹ️ Nota</div>
+                La ruta del ejecutable debe ser <strong>válida en el equipo del estudiante</strong>,
+                no en el del profesor. Por ejemplo: <code>C:\Program Files\VLC\vlc.exe</code>.
+            </div>
+        </section>
+
+        <!-- ── WOL ── -->
+        <section id="wol">
+            <h2>Wake-on-LAN</h2>
+            <p>
+                Permite encender remotamente equipos apagados, siempre que tengan Wake-on-LAN
+                habilitado en la BIOS/UEFI y en la tarjeta de red.
+            </p>
+
+            <h3>Encender equipos desde el diálogo de Energía</h3>
+            <p>
+                La sección <em>📡 Wake-on-LAN</em> muestra los equipos <strong>desconectados con
+                MAC registrada</strong>. Selecciona los que deseas encender y usa:
+            </p>
+            <ul>
+                <li><strong>Encender seleccionados</strong> — Solo los equipos marcados en la lista.</li>
+                <li><strong>Encender Todos</strong> — Todos los equipos con MAC conocida.</li>
+            </ul>
+
+            <h3>Encender un equipo desde su miniatura</h3>
+            <p>Las miniaturas de equipos desconectados muestran un botón <strong>⚡ WoL</strong>. Haz clic para encender
+                ese equipo.</p>
+
+            <h3>WoL manual por dirección MAC</h3>
+            <p>Si conoces la MAC directamente, introdúcela en el campo <code>AA:BB:CC:DD:EE:FF</code> y haz clic en
+                <strong>⚡ Enviar WoL</strong>.</p>
+
+            <div class="callout warn">
+                <div class="title">⚠️ Requisitos para WoL</div>
+                <ul>
+                    <li>Wake-on-LAN habilitado en BIOS/UEFI del equipo estudiante.</li>
+                    <li>WoL habilitado en la tarjeta de red (Administrador de dispositivos → propiedades de la NIC).
+                    </li>
+                    <li>El equipo debe haberse conectado al menos una vez para que el servidor recuerde su MAC.</li>
+                    <li>Todos los equipos deben estar en el mismo segmento de red (LAN).</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- ── ENVÍO DE ARCHIVOS ── -->
+        <section id="envio-archivos">
+            <h2>Envío de archivos</h2>
+            <p>
+                Envía documentos directamente al <strong>Escritorio</strong> de los estudiantes
+                sin necesidad de carpetas compartidas o correo electrónico.
+            </p>
+
+            <h3>Enviar a múltiples estudiantes</h3>
+            <ol class="steps">
+                <li>Haz clic en <strong>📤 Enviar archivo</strong> en la barra de herramientas.</li>
+                <li>Selecciona el archivo (PDF, Word, Excel, PowerPoint, imágenes — máx. 35 MB).</li>
+                <li>Elige los estudiantes destinatarios.</li>
+                <li>El archivo aparecerá en el Escritorio de cada estudiante seleccionado.</li>
+            </ol>
+
+            <h3>Enviar a un estudiante específico</h3>
+            <p>Haz <strong>clic derecho</strong> sobre la miniatura del estudiante → <em>Enviar archivo</em>.</p>
+
+            <div class="callout warn">
+                <div class="title">⚠️ Límite de tamaño</div>
+                El tamaño máximo por archivo es <strong>35 MB</strong>. Para archivos más grandes,
+                comprímelos antes de enviarlos (zip, rar, etc.).
+            </div>
+        </section>
+
+        <!-- ── LOG ── -->
+        <section id="log">
+            <h2>Registro de violaciones de política</h2>
+            <p>
+                Cuando un agente detecta que un estudiante intentó abrir una aplicación o
+                sitio web bloqueado, envía un reporte al servidor que queda registrado en
+                el <strong>Log de Políticas</strong>.
+            </p>
+            <ul>
+                <li>El ícono <strong>📋</strong> en la barra muestra un badge rojo 🔴 cuando hay eventos sin leer.</li>
+                <li>Haz clic en <strong>📋</strong> para abrir la ventana de log.</li>
+                <li>El log muestra: <em>equipo</em>, <em>proceso o URL</em> bloqueada, <em>tipo de política</em> y <em>hora</em>.
+                </li>
+            </ul>
+            <img src="log.png" alt="Registro de violaciones de política">
+        </section>
+
+        <!-- ── PROCEDIMIENTOS ── -->
+        <section id="procedimientos">
+            <h2>Procedimientos paso a paso</h2>
+
+            <h3>▶ Iniciar una clase con restricciones web</h3>
+            <ol class="steps">
+                <li>Abre DLSlab Server. Espera a que todos los estudiantes se conecten.</li>
+                <li>Haz clic en <strong>🛡️ Políticas</strong>.</li>
+                <li>En la pestaña <strong>Web</strong>, selecciona <em>Solo URLs permitidas</em>.</li>
+                <li>Añade las URLs del examen o práctica (ej. <code>https://campus.universidad.edu</code>).</li>
+                <li>Asegúrate de que <em>Aplicar a: Todos</em> esté seleccionado y haz clic en <strong>Aplicar</strong>.
+                </li>
+                <li>Verifica que aparezca el badge <span class="badge green">✅ WEB</span> en las miniaturas.</li>
+            </ol>
+
+            <h3>▶ Hacer una presentación del profesor</h3>
+            <ol class="steps">
+                <li>Haz clic en <strong>🔒 Bloquear pantalla</strong> para que los estudiantes estén atentos.</li>
+                <li>Prepara tu presentación o pantalla.</li>
+                <li>Haz clic en <strong>📡 Transmitir mi pantalla</strong>.</li>
+                <li>Selecciona todos los estudiantes y haz clic en <strong>Iniciar</strong>.</li>
+                <li>El indicador <em>🔴 EN VIVO</em> aparecerá en la barra.</li>
+                <li>Al terminar: <strong>⏹️ Detener transmisión</strong> → <strong>🔓 Desbloquear</strong>.</li>
+            </ol>
+
+            <h3>▶ Finalizar la clase</h3>
+            <ol class="steps">
+                <li>Haz clic en <strong>🛡️ Políticas</strong> → <em>Limpiar Todo</em> para eliminar restricciones.</li>
+                <li>Haz clic en <strong>⚡ Energía</strong> → <em>Apagar Todo</em>.</li>
+                <li>Confirma el apagado. Los equipos se apagarán en 5 segundos.</li>
+                <li>Cierra DLSlab Server con <kbd>Ctrl</kbd>+<kbd>Q</kbd> o <em>Archivo → Salir</em>.</li>
+            </ol>
+        </section>
+
+        <!-- ── FAQ ── -->
+        <section id="faq">
+            <h2>Preguntas frecuentes</h2>
+
+            <details>
+                <summary>¿Por qué no aparecen estudiantes en la cuadrícula?</summary>
+                <div class="faq-body">
+                    <ul>
+                        <li>Verifica que los equipos de los estudiantes estén encendidos y con sesión iniciada.</li>
+                        <li>Confirma que el Agente (<code>DLSlab_Agent.exe</code>) está ejecutándose en esos equipos.
+                        </li>
+                        <li>Asegúrate de que todos los equipos están en la misma red local.</li>
+                        <li>Verifica que el Firewall del PC del profesor permite el <strong>puerto 9000 TCP</strong>.
+                        </li>
+                        <li>La barra de estado debe mostrar <em>"Server listening on port 9000"</em> al arrancar.</li>
+                    </ul>
+                </div>
+            </details>
+
+            <details>
+                <summary>¿Las restricciones web no funcionan en los equipos?</summary>
+                <div class="faq-body">
+                    <p>La política web requiere que el Agente tenga <strong>permisos de Administrador</strong>.
+                        Verifica que la tarea programada de inicio del agente use nivel de ejecución elevado.
+                        También asegúrate de que el navegador no use servidores DNS alternativos (DoH).</p>
+                </div>
+            </details>
+
+            <details>
+                <summary>¿Puedo usar DLSlab con WiFi?</summary>
+                <div class="faq-body">
+                    <p>Sí, funciona con WiFi, pero se recomienda red cableada para mejor rendimiento
+                        en las transmisiones de pantalla. Wake-on-LAN puede no funcionar en redes WiFi.</p>
+                </div>
+            </details>
+
+            <details>
+                <summary>¿Cómo cambio el tema de la interfaz?</summary>
+                <div class="faq-body">
+                    <p>Menú <strong>Archivo → Tema → Claro / Oscuro</strong> (atajos: <kbd>Ctrl+C</kbd> /
+                        <kbd>Ctrl+O</kbd>).</p>
+                </div>
+            </details>
+
+            <details>
+                <summary>¿Puedo controlar solo algunos equipos?</summary>
+                <div class="faq-body">
+                    <p>Sí. En todos los diálogos de acción (bloqueo, políticas, energía) puedes elegir
+                        <em>Selección múltiple</em> y hacer clic en los equipos específicos que deseas afectar.</p>
+                </div>
+            </details>
+
+            <details>
+                <summary>¿Qué pasa si el servidor se cierra mientras hay estudiantes conectados?</summary>
+                <div class="faq-body">
+                    <p>Los agentes intentan reconectarse automáticamente cada pocos segundos con
+                        espera exponencial. Cuando el servidor se reinicia, los agentes se reconectan
+                        y vuelven a aparecer en la cuadrícula.</p>
+                </div>
+            </details>
+
+            <details>
+                <summary>¿El estudiante sabe que está siendo monitoreado?</summary>
+                <div class="faq-body">
+                    <p>El Agente aparece como un pequeño ícono en la bandeja del sistema del estudiante.
+                        Para cumplir con normativas de privacidad, se recomienda informar a los estudiantes
+                        sobre el uso del sistema al inicio del curso.</p>
+                </div>
+            </details>
+        </section>
+
+        <!-- ── TROUBLESHOOTING ── -->
+        <section id="troubleshooting">
+            <h2>Solución de problemas</h2>
+
+            <h3>El servidor no arranca / error al iniciar</h3>
+            <ul>
+                <li>Verifica que no haya otra instancia de DLSlab Server abierta.</li>
+                <li>Confirma que el puerto 9000 no está ocupado por otra aplicación:
+                    <pre><code>netstat -ano | findstr :9000</code></pre>
+                </li>
+                <li>Ejecuta DLSlab Server como <strong>Administrador</strong>.</li>
+            </ul>
+
+            <h3>Las miniaturas no se actualizan</h3>
+            <ul>
+                <li>Verifica la conexión de red entre el PC del profesor y el laboratorio.</li>
+                <li>Comprueba que el agente no esté suspendido o con alta carga de CPU.</li>
+            </ul>
+
+            <h3>El control remoto tiene lag excesivo</h3>
+            <ul>
+                <li>Cierra otras transmisiones activas antes de iniciar el control remoto.</li>
+                <li>Verifica el ancho de banda de la red local.</li>
+            </ul>
+
+            <h3>Wake-on-LAN no funciona</h3>
+            <ul>
+                <li>Verifica que WoL esté habilitado en BIOS y en el adaptador de red del equipo.</li>
+                <li>Confirma que el equipo se conectó previamente para que el servidor registre su MAC.</li>
+                <li>WoL solo funciona en redes cableadas (no WiFi en la mayoría de casos).</li>
+            </ul>
+
+            <h3>Cómo reportar un error</h3>
+            <p>Contacta al soporte técnico indicando:</p>
+            <ol>
+                <li>Descripción del problema y pasos para reproducirlo.</li>
+                <li>Versión de DLSlab (<em>Ayuda → Acerca de</em>).</li>
+                <li>Sistema operativo (Windows 10/11) y versión de Python si aplica.</li>
+                <li>Capturas de pantalla del error si es posible.</li>
+            </ol>
+            <p>📧 <a href="mailto:ayuda@dls-lab.com">ayuda@dls-lab.com</a></p>
+        </section>
+
+        <!-- ── GLOSARIO ── -->
+        <section id="glosario">
+            <h2>Glosario</h2>
+            <table>
+                <tr>
+                    <th>Término</th>
+                    <th>Definición</th>
+                </tr>
+                <tr>
+                    <td><strong>Agente</strong></td>
+                    <td>Programa (<code>DLSlab_Agent.exe</code>) instalado en cada PC del estudiante que se conecta al
+                        servidor.
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>Servidor</strong></td>
+                    <td>La Consola del Profesor (<code>DLSlab_Server.exe</code>) que recibe conexiones y envía comandos.
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>Miniatura</strong></td>
+                    <td>Captura de pantalla reducida (320×180 px) que el agente envía cada 2 segundos.</td>
+                </tr>
+                <tr>
+                    <td><strong>Lista Blanca</strong></td>
+                    <td>Lista de elementos permitidos; todo lo que no está en la lista queda bloqueado.</td>
+                </tr>
+                <tr>
+                    <td><strong>Lista Negra</strong></td>
+                    <td>Lista de elementos prohibidos; todo lo que no está en la lista está permitido.</td>
+                </tr>
+                <tr>
+                    <td><strong>Wake-on-LAN (WoL)</strong></td>
+                    <td>Tecnología que permite encender un PC apagado enviando un "paquete mágico" a su dirección MAC
+                        por la red.
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>TCP / Puerto 9000</strong></td>
+                    <td>Protocolo y puerto de comunicación entre el servidor y los agentes.</td>
+                </tr>
+                <tr>
+                    <td><strong>Hosts (archivo)</strong></td>
+                    <td>Archivo del sistema de Windows usado por la política web para bloquear dominios: <code>C:\Windows\System32\drivers\etc\hosts</code>.
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>LAN</strong></td>
+                    <td>Red de área local — la red del laboratorio a la que están conectados todos los equipos.</td>
+                </tr>
+                <tr>
+                    <td><strong>FPS</strong></td>
+                    <td>Cuadros por segundo en la transmisión de pantalla. Mayor FPS = más fluido pero más ancho de
+                        banda.
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>Proceso</strong></td>
+                    <td>Nombre del ejecutable de una aplicación (ej. <code>chrome.exe</code>) usado en políticas de
+                        apps.
+                    </td>
+                </tr>
+            </table>
+        </section>
+
+        <!-- ── ATAJOS ── -->
+        <section id="atajos">
+            <h2>Atajos y consejos</h2>
+
+            <h3>Atajos de teclado</h3>
+            <table>
+                <tr>
+                    <th>Atajo</th>
+                    <th>Acción</th>
+                </tr>
+                <tr>
+                    <td><kbd>Ctrl</kbd>+<kbd>Q</kbd></td>
+                    <td>Cerrar DLSlab Server</td>
+                </tr>
+                <tr>
+                    <td><kbd>Ctrl</kbd>+<kbd>H</kbd></td>
+                    <td>Abrir página de Ayuda</td>
+                </tr>
+                <tr>
+                    <td><kbd>Ctrl</kbd>+<kbd>C</kbd></td>
+                    <td>Aplicar tema Claro</td>
+                </tr>
+                <tr>
+                    <td><kbd>Ctrl</kbd>+<kbd>O</kbd></td>
+                    <td>Aplicar tema Oscuro</td>
+                </tr>
+                <tr>
+                    <td><kbd>Ctrl</kbd> + clic</td>
+                    <td>Selección múltiple en listas de alumnos</td>
+                </tr>
+            </table>
+
+            <h3>Consejos de uso</h3>
+            <ul>
+                <li>🔴 Usa el <strong>apagado de emergencia</strong> de la barra solo para situaciones urgentes; prefiere
+                    el diálogo de Energía para mayor control.
+                </li>
+                <li>📝 Configura las <strong>políticas antes</strong> de que los estudiantes comiencen a trabajar.</li>
+                <li>🎯 Usa <strong>selección múltiple</strong> para aplicar acciones a grupos específicos (ej. solo los
+                    que terminaron).
+                </li>
+                <li>💾 Los equipos recordados vía WoL persisten entre sesiones: sus MACs se almacenan automáticamente.
+                </li>
+                <li>🖥️ Puedes ampliar la miniatura de un estudiante haciendo <strong>doble clic</strong> sobre ella para
+                    ver mejor su pantalla.
+                </li>
+                <li>⚡ Los accesos rápidos de URLs en Ejecución Remota (Office 365, Google Classroom, etc.) se pueden
+                    usar para abrir la plataforma del curso con un solo clic.
+                </li>
+            </ul>
+        </section>
+
+        <!-- ── SOPORTE ── -->
+        <section id="soporte">
+            <h2>Información de soporte</h2>
+            <p>Si necesitas ayuda adicional, nuestro equipo está disponible para asistirte:</p>
+            <table>
+                <tr>
+                    <th>Canal</th>
+                    <th>Contacto</th>
+                </tr>
+                <tr>
+                    <td>📧 Correo electrónico</td>
+                    <td><a href="mailto:ayuda@dls-lab.com">ayuda@dls-lab.com</a></td>
+                </tr>
+            </table>
+            <p>Al contactarnos, incluye:</p>
+            <ul>
+                <li>Versión de DLSlab (ver en <em>Ayuda → Acerca de</em>).</li>
+                <li>Descripción detallada del problema.</li>
+                <li>Capturas de pantalla si aplica.</li>
+            </ul>
+
+            <div class="callout tip">
+                <div class="title">✅ Antes de contactar soporte</div>
+                Revisa la sección <a href="#troubleshooting">Solución de problemas</a> —
+                la mayoría de los problemas comunes tienen solución documentada allí.
+            </div>
+        </section>
+
+        <footer>
+            DLSlab v1.0 · &copy; DLSlab · <a href="mailto:ayuda@dls-lab.com">ayuda@dls-lab.com</a>
+        </footer>
+
+    </main>
+</div>
+
+<script>
+    // Highlight active nav link on scroll
+    const sections = document.querySelectorAll('section[id]');
+    const navLinks = document.querySelectorAll('nav a[href^="#"]');
+    window.addEventListener('scroll', () => {
+        let current = '';
+        sections.forEach(s => {
+            if (window.scrollY >= s.offsetTop - 60) current = s.id;
+        });
+        navLinks.forEach(a => {
+            a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+        });
+    }, {passive: true});
+</script>
+</body>
+</html>

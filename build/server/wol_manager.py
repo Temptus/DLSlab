@@ -28,12 +28,35 @@ class WolManager:
         self._load_known_macs()
 
     def register_mac(self, client_id: str, mac: str) -> None:
-        """Register (or update) a MAC address for a given client."""
+        """Register (or update) a MAC address for a given client.
+
+        If the same MAC is already stored under a *different* client_id
+        (stale entry from a previous run), that old entry is removed so the
+        teacher console never shows duplicate thumbnails for the same machine.
+        """
         normalized = self._normalize_mac(mac)
         if not normalized:
             return
+        # Remove stale entries that share the same MAC under a different ID.
+        stale = [
+            cid for cid, m in self._known_macs.items()
+            if m == normalized and cid != client_id
+        ]
+        for cid in stale:
+            del self._known_macs[cid]
+            logger.info(
+                "Removed stale MAC entry %s (MAC %s re-assigned to %s)",
+                cid, normalized, client_id,
+            )
         self._known_macs[client_id] = normalized
         self._save_known_macs()
+
+    def find_client_id_by_mac(self, normalized_mac: str) -> str | None:
+        """Return the client_id that owns *normalized_mac*, or ``None``."""
+        for cid, mac in self._known_macs.items():
+            if mac == normalized_mac:
+                return cid
+        return None
 
     def wake(self, client_id: str) -> bool:
         """Send a WoL packet to a client by its ID."""

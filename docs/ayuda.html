@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>DLSlab — Manuales de Ayuda </title>
+    <style>
+        :root {
+            --primary: #1565c0;
+            --primary-dark: #0d47a1;
+            --primary-light: #e3f2fd;
+            --text: #1a1a1a;
+            --text-muted: #555;
+            --border: #ddd;
+            --bg: #fafafa;
+            --white: #ffffff;
+            --code-bg: #f4f4f4;
+            --warn-bg: #fff8e1;
+            --warn-border: #f9a825;
+            --tip-bg: #e8f5e9;
+            --tip-border: #43a047;
+            --info-bg: #e3f2fd;
+            --info-border: #1976d2;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            font-size: 15px;
+            color: var(--text);
+            background: var(--bg);
+            line-height: 1.7;
+        }
+
+        .wrapper {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        nav#sidebar {
+            width: 270px;
+            min-width: 270px;
+            background: var(--white);
+            border-right: 1px solid var(--border);
+            padding: 24px 0;
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            overflow-y: auto;
+        }
+
+        nav#sidebar .logo {
+            padding: 0 20px 20px;
+            border-bottom: 2px solid var(--primary);
+            margin-bottom: 16px;
+        }
+
+        nav#sidebar .logo h1 {
+            font-size: 20px;
+            color: var(--primary);
+            font-weight: 700;
+        }
+
+        nav#sidebar .logo p {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        nav#sidebar ul {
+            list-style: none;
+        }
+
+        nav#sidebar ul li a {
+            display: block;
+            padding: 8px 20px;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 13px;
+            transition: all .15s;
+            border-left: 3px solid transparent;
+        }
+
+        nav#sidebar ul li a:hover,
+        nav#sidebar ul li a.active {
+            color: var(--primary);
+            background: var(--primary-light);
+            border-left-color: var(--primary);
+        }
+
+        nav#sidebar ul li.section-title {
+            padding: 14px 20px 4px;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            color: #999;
+        }
+
+        main#content {
+            flex: 1;
+            padding: 40px 48px;
+            max-width: 900px;
+        }
+
+        h1 {
+            font-size: 32px;
+            color: var(--primary);
+            margin-bottom: 8px;
+        }
+
+        h2 {
+            font-size: 22px;
+            color: var(--primary-dark);
+            margin: 48px 0 12px;
+        }
+
+        h3 {
+            font-size: 17px;
+            color: var(--text);
+            margin: 28px 0 8px;
+            font-weight: 600;
+        }
+
+        p {
+            margin-bottom: 14px;
+        }
+
+        ul, ol {
+            padding-left: 24px;
+            margin-bottom: 14px;
+        }
+
+        li {
+            margin-bottom: 6px;
+        }
+
+        a {
+            color: var(--primary);
+        }
+
+        strong {
+            color: var(--primary-dark);
+        }
+
+        code {
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 1px 6px;
+            font-size: 13px;
+            font-family: 'Consolas', 'Courier New', monospace;
+        }
+
+        pre {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            border-radius: 6px;
+            padding: 16px 20px;
+            overflow-x: auto;
+            font-size: 13px;
+            margin-bottom: 16px;
+            line-height: 1.5;
+        }
+
+        pre code {
+            background: none;
+            border: none;
+            color: inherit;
+        }
+
+        .callout {
+            border-radius: 6px;
+            padding: 14px 18px;
+            margin: 16px 0;
+            border-left: 4px solid;
+        }
+
+        .callout.warn {
+            background: var(--warn-bg);
+            border-color: var(--warn-border);
+        }
+
+        .callout.tip {
+            background: var(--tip-bg);
+            border-color: var(--tip-border);
+        }
+
+        .callout.info {
+            background: var(--info-bg);
+            border-color: var(--info-border);
+        }
+
+        .callout .title {
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .callout.warn .title {
+            color: #e65100;
+        }
+
+        .callout.tip .title {
+            color: #2e7d32;
+        }
+
+        .callout.info .title {
+            color: #1565c0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        th {
+            background: var(--primary);
+            color: white;
+            padding: 10px 14px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        td {
+            padding: 9px 14px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        tr:nth-child(even) td {
+            background: #f0f6ff;
+        }
+
+        .steps {
+            counter-reset: step;
+            padding: 0;
+            list-style: none;
+        }
+
+        .steps li {
+            counter-increment: step;
+            position: relative;
+            padding: 12px 12px 12px 52px;
+            margin-bottom: 8px;
+            background: var(--white);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+        }
+
+        .steps li::before {
+            content: counter(step);
+            position: absolute;
+            left: 14px;
+            top: 12px;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--primary);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 13px;
+        }
+
+        .badge {
+            display: inline-block;
+            border-radius: 4px;
+            padding: 2px 8px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .badge.green {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .badge.red {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .badge.blue {
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+
+        .badge.orange {
+            background: #fff3e0;
+            color: #e65100;
+        }
+
+        details {
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            margin-bottom: 10px;
+            overflow: hidden;
+        }
+
+        summary {
+            padding: 12px 16px;
+            cursor: pointer;
+            font-weight: 600;
+            background: var(--white);
+            list-style: none;
+        }
+
+        summary::-webkit-details-marker {
+            display: none;
+        }
+
+        summary::before {
+            content: '▶ ';
+            color: var(--primary);
+            font-size: 11px;
+        }
+
+        details[open] summary::before {
+            content: '▼ ';
+        }
+
+        details[open] summary {
+            border-bottom: 1px solid var(--border);
+        }
+
+        details .faq-body {
+            padding: 14px 16px;
+            background: var(--white);
+        }
+
+        kbd {
+            display: inline-block;
+            background: #f0f0f0;
+            border: 1px solid #ccc;
+            border-bottom: 3px solid #aaa;
+            border-radius: 4px;
+            padding: 2px 8px;
+            font-size: 12px;
+            font-family: monospace;
+        }
+
+        .hero {
+            background: linear-gradient(135deg, var(--primary) 0%, #082a6b 100%);
+            color: white;
+            border-radius: 10px;
+            padding: 30px 32px;
+            margin-bottom: 36px;
+        }
+
+        .hero h1 {
+            color: white;
+            font-size: 28px;
+        }
+
+        .hero p {
+            color: rgba(255, 255, 255, .85);
+            margin: 8px 0 0;
+            font-size: 16px;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .feature-card {
+            background: var(--white);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px;
+        }
+
+        .feature-card .icon {
+            font-size: 22px;
+        }
+
+        .feature-card h4 {
+            margin: 6px 0 4px;
+            font-size: 14px;
+        }
+
+        .feature-card p {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin: 0;
+        }
+
+        footer {
+            margin-top: 60px;
+            padding: 24px;
+            border-top: 1px solid var(--border);
+            color: var(--text-muted);
+            font-size: 13px;
+            text-align: center;
+        }
+
+        section {
+            scroll-margin-top: 24px;
+        }
+
+        @media (max-width: 768px) {
+            .wrapper {
+                flex-direction: column;
+            }
+
+            nav#sidebar {
+                width: 100%;
+                height: auto;
+                position: static;
+            }
+
+            main#content {
+                padding: 24px 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="wrapper">
+
+    <!-- ===================== SIDEBAR ===================== -->
+    <nav id="sidebar">
+        <div class="logo">
+            <h1>🖥️ DLSlab</h1>
+            <p>Ayuda — Manuales</p>
+        </div>
+        <ul>
+            <li class="section-title">Inicio</li>
+            <li><a href="ayuda_servidor.html">📄 Manual de usuario – Servidor</a></li>
+            <li><a href="ayuda_agente.html">📄 Manual de usuario – Agente</a></li>
+        </ul>
+    </nav>
+
+    <!-- ===================== CONTENIDO ===================== -->
+    <main id="content">
+
+        <div>
+            <img src="logo.png" alt="DLSlab Logo">
+            <p>Manuales de Ayuda DLSlab · Versión 1.0</p>
+        </div>
+
+        <!-- ── AYUDA SERVIDOR ── -->
+        <section id="ayuda_servidor">
+            <div>
+                <a href="ayuda_servidor.html"><h2>Manual de usuario – Servidor</h2></a>
+            </div>
+        </section>
+
+        <!-- ── AYUDA AGENTE ── -->
+        <section id="ayuda_agente">
+            <div>
+                <a href="ayuda_agente.html"><h2>Manual de usuario – Agente</h2></a>
+            </div>
+        </section>
+
+        <footer>
+            DLSlab v1.0 · &copy; DLSlab · <a href="mailto:ayuda@dls-lab.com">ayuda@dls-lab.com</a>
+        </footer>
+
+    </main>
+</div>
+
+
+</body>
+</html>

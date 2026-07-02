@@ -1,0 +1,1268 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>DLSlab — Ayuda Agente del Estudiante</title>
+    <style>
+        :root {
+            --primary: #1565c0;
+            --primary-dark: #0d47a1;
+            --primary-light: #e3f2fd;
+            --text: #1a1a1a;
+            --text-muted: #555;
+            --border: #ddd;
+            --bg: #fafafa;
+            --white: #ffffff;
+            --code-bg: #f4f4f4;
+            --warn-bg: #fff8e1;
+            --warn-border: #f9a825;
+            --tip-bg: #e8f5e9;
+            --tip-border: #43a047;
+            --info-bg: #e3f2fd;
+            --info-border: #1976d2;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            font-size: 15px;
+            color: var(--text);
+            background: var(--bg);
+            line-height: 1.7;
+        }
+
+        .wrapper {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        nav#sidebar {
+            width: 270px;
+            min-width: 270px;
+            background: var(--white);
+            border-right: 1px solid var(--border);
+            padding: 24px 0;
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            overflow-y: auto;
+        }
+
+        nav#sidebar .logo {
+            padding: 0 20px 20px;
+            border-bottom: 2px solid var(--primary);
+            margin-bottom: 16px;
+        }
+
+        nav#sidebar .logo h1 {
+            font-size: 20px;
+            color: var(--primary);
+            font-weight: 700;
+        }
+
+        nav#sidebar .logo p {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        nav#sidebar ul {
+            list-style: none;
+        }
+
+        nav#sidebar ul li a {
+            display: block;
+            padding: 8px 20px;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 13px;
+            transition: all .15s;
+            border-left: 3px solid transparent;
+        }
+
+        nav#sidebar ul li a:hover,
+        nav#sidebar ul li a.active {
+            color: var(--primary);
+            background: var(--primary-light);
+            border-left-color: var(--primary);
+        }
+
+        nav#sidebar ul li.section-title {
+            padding: 14px 20px 4px;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            color: #999;
+        }
+
+        main#content {
+            flex: 1;
+            padding: 40px 48px;
+            max-width: 900px;
+        }
+
+        h1 {
+            font-size: 32px;
+            color: var(--primary);
+            margin-bottom: 8px;
+        }
+
+        h2 {
+            font-size: 22px;
+            color: var(--primary-dark);
+            margin: 48px 0 12px;
+            padding-bottom: 6px;
+            border-bottom: 2px solid var(--primary-light);
+        }
+
+        h3 {
+            font-size: 17px;
+            color: var(--text);
+            margin: 28px 0 8px;
+            font-weight: 600;
+        }
+
+        p {
+            margin-bottom: 14px;
+        }
+
+        ul, ol {
+            padding-left: 24px;
+            margin-bottom: 14px;
+        }
+
+        li {
+            margin-bottom: 6px;
+        }
+
+        a {
+            color: var(--primary);
+        }
+
+        strong {
+            color: var(--primary-dark);
+        }
+
+        code {
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 1px 6px;
+            font-size: 13px;
+            font-family: 'Consolas', 'Courier New', monospace;
+        }
+
+        pre {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            border-radius: 6px;
+            padding: 16px 20px;
+            overflow-x: auto;
+            font-size: 13px;
+            margin-bottom: 16px;
+            line-height: 1.5;
+        }
+
+        pre code {
+            background: none;
+            border: none;
+            color: inherit;
+        }
+
+        .callout {
+            border-radius: 6px;
+            padding: 14px 18px;
+            margin: 16px 0;
+            border-left: 4px solid;
+        }
+
+        .callout.warn {
+            background: var(--warn-bg);
+            border-color: var(--warn-border);
+        }
+
+        .callout.tip {
+            background: var(--tip-bg);
+            border-color: var(--tip-border);
+        }
+
+        .callout.info {
+            background: var(--info-bg);
+            border-color: var(--info-border);
+        }
+
+        .callout .title {
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .callout.warn .title {
+            color: #e65100;
+        }
+
+        .callout.tip .title {
+            color: #2e7d32;
+        }
+
+        .callout.info .title {
+            color: #1565c0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        th {
+            background: var(--primary);
+            color: white;
+            padding: 10px 14px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        td {
+            padding: 9px 14px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        tr:nth-child(even) td {
+            background: #f0f6ff;
+        }
+
+        .steps {
+            counter-reset: step;
+            padding: 0;
+            list-style: none;
+        }
+
+        .steps li {
+            counter-increment: step;
+            position: relative;
+            padding: 12px 12px 12px 52px;
+            margin-bottom: 8px;
+            background: var(--white);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+        }
+
+        .steps li::before {
+            content: counter(step);
+            position: absolute;
+            left: 14px;
+            top: 12px;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--primary);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 13px;
+        }
+
+        .badge {
+            display: inline-block;
+            border-radius: 4px;
+            padding: 2px 8px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .badge.green {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .badge.red {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .badge.blue {
+            background: #e3f2fd;
+            color: #1565c0;
+        }
+
+        .badge.orange {
+            background: #fff3e0;
+            color: #e65100;
+        }
+
+        details {
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            margin-bottom: 10px;
+            overflow: hidden;
+        }
+
+        summary {
+            padding: 12px 16px;
+            cursor: pointer;
+            font-weight: 600;
+            background: var(--white);
+            list-style: none;
+        }
+
+        summary::-webkit-details-marker {
+            display: none;
+        }
+
+        summary::before {
+            content: '▶ ';
+            color: var(--primary);
+            font-size: 11px;
+        }
+
+        details[open] summary::before {
+            content: '▼ ';
+        }
+
+        details[open] summary {
+            border-bottom: 1px solid var(--border);
+        }
+
+        details .faq-body {
+            padding: 14px 16px;
+            background: var(--white);
+        }
+
+        kbd {
+            display: inline-block;
+            background: #f0f0f0;
+            border: 1px solid #ccc;
+            border-bottom: 3px solid #aaa;
+            border-radius: 4px;
+            padding: 2px 8px;
+            font-size: 12px;
+            font-family: monospace;
+        }
+
+        .hero {
+            background: linear-gradient(135deg, var(--primary) 0%, #082a6b 100%);
+            color: white;
+            border-radius: 10px;
+            padding: 30px 32px;
+            margin-bottom: 36px;
+        }
+
+        .hero h1 {
+            color: white;
+            font-size: 28px;
+        }
+
+        .hero p {
+            color: rgba(255, 255, 255, .85);
+            margin: 8px 0 0;
+            font-size: 16px;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .feature-card {
+            background: var(--white);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px;
+        }
+
+        .feature-card .icon {
+            font-size: 22px;
+        }
+
+        .feature-card h4 {
+            margin: 6px 0 4px;
+            font-size: 14px;
+        }
+
+        .feature-card p {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin: 0;
+        }
+
+        footer {
+            margin-top: 60px;
+            padding: 24px;
+            border-top: 1px solid var(--border);
+            color: var(--text-muted);
+            font-size: 13px;
+            text-align: center;
+        }
+
+        section {
+            scroll-margin-top: 24px;
+        }
+
+        @media (max-width: 768px) {
+            .wrapper {
+                flex-direction: column;
+            }
+
+            nav#sidebar {
+                width: 100%;
+                height: auto;
+                position: static;
+            }
+
+            main#content {
+                padding: 24px 20px;
+            }
+        }
+
+        .logo {
+            display: block;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+<div class="wrapper">
+
+    <!-- ===================== SIDEBAR ===================== -->
+    <nav id="sidebar">
+        <div class="logo">
+            <a href="ayuda.html"><img src="logo.png" alt="dlslab logo" class="logo"></a>
+            <p>Ayuda — Agente del Estudiante</p>
+        </div>
+        <ul>
+            <li class="section-title">Inicio</li>
+            <li><a href="#intro">¿Qué es el Agente?</a></li>
+            <li><a href="#inicio-rapido">Instalación rápida</a></li>
+            <li class="section-title">Instalación</li>
+            <li><a href="#instalador">Usando el instalador</a></li>
+            <li><a href="#manual">Instalación manual</a></li>
+            <li><a href="#masivo">Despliegue masivo</a></li>
+            <li><a href="#config">Archivo de configuración</a></li>
+            <li class="section-title">Funcionamiento</li>
+            <li><a href="#funciones">Qué hace el agente</a></li>
+            <li><a href="#bandeja">Ícono en bandeja</a></li>
+            <li><a href="#comandos">Comandos recibidos</a></li>
+            <li><a href="#politicas">Políticas aplicadas</a></li>
+            <li><a href="#wol">Wake-on-LAN</a></li>
+            <li class="section-title">Referencia</li>
+            <li><a href="#procedimientos">Procedimientos</a></li>
+            <li><a href="#faq">Preguntas frecuentes</a></li>
+            <li><a href="#troubleshooting">Solución de problemas</a></li>
+            <li><a href="#glosario">Glosario</a></li>
+            <li><a href="#atajos">Atajos y consejos</a></li>
+            <li><a href="#soporte">Soporte</a></li>
+            <li><a href="ayuda_servidor.html">Ayuda — Consola del Profesor</a></li>
+        </ul>
+    </nav>
+
+    <!-- ===================== CONTENIDO ===================== -->
+    <main id="content">
+
+        <div class="hero">
+            <h1>🖥️ DLSlab — Agente del Estudiante</h1>
+            <p>Guía de instalación y administración · Versión 1.0</p>
+        </div>
+
+        <!-- ── INTRO ── -->
+        <section id="intro">
+            <h2>¿Qué es el Agente DLSlab?</h2>
+            <p>
+                El <strong>Agente DLSlab</strong> (<code>DLSlab_Agent.exe</code>) es el componente
+                que se instala en cada <strong>PC del laboratorio (estudiantes)</strong>. Se conecta
+                automáticamente al servidor del profesor (<code>DLSlab_Server.exe</code>) y permite
+                la supervisión y gestión remota del equipo.
+            </p>
+            <p>
+                El agente está diseñado para ser <strong>transparente para el estudiante</strong>:
+                no aparece como ventana en la barra de tareas, solo como un pequeño ícono en la
+                <strong>bandeja del sistema</strong> (área de notificaciones).
+            </p>
+
+            <div class="callout info">
+                <div class="title">ℹ️ Destinatarios de esta guía</div>
+                Esta guía está dirigida a <strong>administradores de TI</strong> o al
+                <strong>técnico del laboratorio</strong> responsable de instalar y mantener
+                el agente en los equipos de los estudiantes.
+            </div>
+
+            <table>
+                <tr>
+                    <th>Requisito</th>
+                    <th>Detalle</th>
+                </tr>
+                <tr>
+                    <td>Sistema Operativo</td>
+                    <td>Windows 10 / 11 (64-bit)</td>
+                </tr>
+                <tr>
+                    <td>Privilegios</td>
+                    <td>Administrador local (para políticas web y tarea programada)</td>
+                </tr>
+                <tr>
+                    <td>Red</td>
+                    <td>Misma LAN que el PC del profesor (puerto TCP 9000 abierto)</td>
+                </tr>
+                <tr>
+                    <td>Sin Internet</td>
+                    <td>No requiere conexión a Internet para operar</td>
+                </tr>
+            </table>
+        </section>
+
+        <!-- ── INICIO RÁPIDO ── -->
+        <section id="inicio-rapido">
+            <h2>Instalación rápida</h2>
+            <ol class="steps">
+                <li>Copia <code>DLSlab_Agent_Setup_v1.0.exe</code> al equipo del estudiante.</li>
+                <li>Ejecuta el instalador como <strong>Administrador</strong>.</li>
+                <li>Cuando el asistente pregunte la dirección del servidor, ingresa la
+                    <strong>IP o nombre del PC del profesor</strong> (ej. <code>192.168.1.100</code>
+                    o <code>DLSLAB-PROF</code>).
+                </li>
+                <li>Completa la instalación. El agente se iniciará automáticamente y
+                    quedará configurado para arrancar en cada inicio de sesión.
+                </li>
+                <li>El ícono de DLSlab aparecerá en la <strong>bandeja del sistema</strong>.</li>
+            </ol>
+            <div class="callout tip">
+                <div class="title">💡 Consejo</div>
+                Si no sabes la IP del PC del profesor, en ese equipo abre una ventana de comandos
+                y escribe <code>ipconfig</code>. Busca la dirección IPv4 de la interfaz de red local.
+            </div>
+        </section>
+
+        <!-- ── INSTALADOR ── -->
+        <section id="instalador">
+            <h2>Usando el instalador (recomendado)</h2>
+            <p>
+                El instalador <code>DLSlab_Agent_Setup_v1.0.exe</code> automatiza todo el proceso:
+            </p>
+            <ol class="steps">
+                <li>Copia <code>DLSlab_Agent.exe</code> a <code>%ProgramFiles%\DLSlab\</code>.</li>
+                <li>Solicita la dirección del servidor y crea
+                    <code>%ProgramData%\DLSlab\config.ini</code> automáticamente.
+                </li>
+                <li>Registra una <strong>Tarea Programada</strong> en el Programador de tareas de
+                    Windows que inicia el agente automáticamente al iniciar sesión cualquier usuario.
+                </li>
+            </ol>
+
+            <h3>Parámetros del instalador</h3>
+            <table>
+                <tr>
+                    <th>Campo en el instalador</th>
+                    <th>Descripción</th>
+                    <th>Ejemplo</th>
+                </tr>
+                <tr>
+                    <td>Servidor DLSlab</td>
+                    <td>IP o nombre de host del PC del profesor</td>
+                    <td><code>192.168.1.100</code> o <code>DLSLAB-PROF</code></td>
+                </tr>
+            </table>
+
+            <h3>Desinstalación</h3>
+            <p>
+                Ve a <em>Panel de Control → Programas → Desinstalar un programa</em> y selecciona
+                <strong>DLSlab Agent</strong>. La desinstalación elimina automáticamente:
+            </p>
+            <ul>
+                <li>El archivo <code>config.ini</code> y el directorio de datos.</li>
+                <li>La Tarea Programada de inicio automático.</li>
+                <li>Los archivos instalados.</li>
+            </ul>
+
+            <div class="callout warn">
+                <div class="title">⚠️ Requiere Administrador</div>
+                Tanto la instalación como la desinstalación deben ejecutarse con permisos de
+                <strong>Administrador</strong>.
+            </div>
+        </section>
+
+        <!-- ── MANUAL ── -->
+        <section id="manual">
+            <h2>Instalación manual (avanzado)</h2>
+            <p>Si prefieres instalar sin el asistente, sigue estos pasos:</p>
+            <ol class="steps">
+                <li>
+                    Copia <code>DLSlab_Agent.exe</code> al directorio deseado, por ejemplo:
+                    <pre><code>C:\Program Files\DLSlab\DLSlab_Agent.exe</code></pre>
+                </li>
+                <li>
+                    Crea el archivo de configuración <code>C:\ProgramData\DLSlab\config.ini</code>:
+                    <pre><code>; DLSlab Agent — configuración
+[server]
+host = 192.168.1.100
+port = 9000</code></pre>
+                </li>
+                <li>
+                    Ejecuta el agente manualmente (como Administrador):
+                    <pre><code>DLSlab_Agent.exe</code></pre>
+                    O con parámetros de línea de comandos (sobreescriben el config.ini):
+                    <pre><code>DLSlab_Agent.exe --server-ip 192.168.1.100 --server-port 9000</code></pre>
+                </li>
+            </ol>
+
+            <h3>Parámetros de línea de comandos</h3>
+            <table>
+                <tr>
+                    <th>Parámetro</th>
+                    <th>Por defecto</th>
+                    <th>Descripción</th>
+                </tr>
+                <tr>
+                    <td><code>--server-ip</code></td>
+                    <td><code>127.0.0.1</code></td>
+                    <td>IP o hostname del servidor (PC del profesor)</td>
+                </tr>
+                <tr>
+                    <td><code>--server-port</code></td>
+                    <td><code>9000</code></td>
+                    <td>Puerto TCP del servidor</td>
+                </tr>
+                <tr>
+                    <td><code>--client-id</code></td>
+                    <td>Auto (hostname + ID)</td>
+                    <td>Identificador manual del cliente</td>
+                </tr>
+            </table>
+
+            <h3>Configurar inicio automático manual</h3>
+            <p>Para que el agente arranque automáticamente sin el instalador, crea una tarea en el
+                Programador de tareas de Windows:</p>
+            <ol class="steps">
+                <li>Abre el Programador de tareas (<code>taskschd.msc</code>) como Administrador.</li>
+                <li>Crea una tarea básica: <em>Nombre: DLSlab Agent</em>.</li>
+                <li>Desencadenador: <em>Al iniciar sesión (cualquier usuario)</em>.</li>
+                <li>Acción: <em>Iniciar programa</em> → ruta de <code>DLSlab_Agent.exe</code>.</li>
+                <li>En las propiedades de la tarea, pestaña General: marca
+                    <em>"Ejecutar con los privilegios más altos"</em>.
+                </li>
+            </ol>
+        </section>
+
+        <!-- ── MASIVO ── -->
+        <section id="masivo">
+            <h2>Despliegue masivo en el laboratorio</h2>
+            <p>Para instalar el agente en múltiples equipos simultáneamente desde el servidor:</p>
+
+            <h3>Opción 1: Script PowerShell (red compartida)</h3>
+            <pre><code>$computers = @("PC-LAB-01", "PC-LAB-02", "PC-LAB-03")
+foreach ($pc in $computers) {
+    # Copiar ejecutable
+    Copy-Item "DLSlab_Agent.exe" "\\$pc\C$\Program Files\DLSlab\"
+    # Crear config.ini
+    $config = "[server]`nhost = 192.168.1.100`nport = 9000"
+    New-Item -Path "\\$pc\C$\ProgramData\DLSlab\" -ItemType Directory -Force
+    Set-Content "\\$pc\C$\ProgramData\DLSlab\config.ini" $config
+}</code></pre>
+
+            <h3>Opción 2: Ejecutar el instalador silenciosamente</h3>
+            <p>El instalador de Inno Setup admite instalación desatendida:</p>
+            <pre><code>DLSlab_Agent_Setup_v1.0.exe /SILENT /SP-</code></pre>
+            <div class="callout info">
+                <div class="title">ℹ️ Nota sobre instalación silenciosa</div>
+                En modo silencioso, el instalador usa el valor por defecto para el servidor
+                (<code>DLSLAB-PROF</code>). Modifica previamente el script <code>setup_agent.iss</code>
+                o edita el <code>config.ini</code> tras la instalación.
+            </div>
+        </section>
+
+        <!-- ── CONFIG ── -->
+        <section id="config">
+            <h2>Archivo de configuración</h2>
+            <p>
+                El agente lee su configuración desde:
+                <code>C:\ProgramData\DLSlab\config.ini</code>
+            </p>
+            <pre><code>; DLSlab Agent — configuración generada por el instalador
+[server]
+host = 192.168.1.100
+port = 9000</code></pre>
+
+            <table>
+                <tr>
+                    <th>Clave</th>
+                    <th>Descripción</th>
+                    <th>Ejemplo</th>
+                </tr>
+                <tr>
+                    <td><code>host</code></td>
+                    <td>IP o hostname del PC del profesor</td>
+                    <td><code>192.168.1.100</code></td>
+                </tr>
+                <tr>
+                    <td><code>port</code></td>
+                    <td>Puerto TCP del servidor</td>
+                    <td><code>9000</code></td>
+                </tr>
+            </table>
+
+            <div class="callout tip">
+                <div class="title">💡 Cambiar el servidor</div>
+                Si la IP del profesor cambia, edita este archivo con Notepad (como Administrador)
+                y reinicia el equipo o la tarea programada del agente.
+            </div>
+        </section>
+
+        <!-- ── FUNCIONES ── -->
+        <section id="funciones">
+            <h2>Qué hace el Agente</h2>
+            <p>El agente opera completamente en segundo plano. Sus funciones principales son:</p>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="icon">📸</div>
+                    <h4>Captura de pantalla</h4>
+                    <p>Envía una miniatura comprimida (320×180 px) al servidor cada 2 segundos.</p></div>
+                <div class="feature-card">
+                    <div class="icon">🔒</div>
+                    <h4>Bloqueo de pantalla</h4>
+                    <p>Muestra una superposición negra con mensaje cuando el profesor bloquea el equipo.</p></div>
+                <div class="feature-card">
+                    <div class="icon">📡</div>
+                    <h4>Recepción de transmisión</h4>
+                    <p>Muestra la pantalla del profesor o de un compañero cuando se activa la transmisión.</p></div>
+                <div class="feature-card">
+                    <div class="icon">🖱️</div>
+                    <h4>Control remoto</h4>
+                    <p>Ejecuta eventos de teclado y ratón enviados por el profesor.</p></div>
+                <div class="feature-card">
+                    <div class="icon">🛡️</div>
+                    <h4>Políticas de apps</h4>
+                    <p>Cierra automáticamente aplicaciones prohibidas según la política activa.</p></div>
+                <div class="feature-card">
+                    <div class="icon">🌐</div>
+                    <h4>Políticas web</h4>
+                    <p>Bloquea dominios modificando el archivo hosts del sistema.</p></div>
+                <div class="feature-card">
+                    <div class="icon">⚡</div>
+                    <h4>Control de energía</h4>
+                    <p>Ejecuta comandos de apagado, reinicio, bloqueo y cierre de sesión.</p></div>
+                <div class="feature-card">
+                    <div class="icon">📁</div>
+                    <h4>Recepción de archivos</h4>
+                    <p>Guarda en el Escritorio los documentos enviados por el profesor.</p></div>
+                <div class="feature-card">
+                    <div class="icon">📋</div>
+                    <h4>Reporte de violaciones</h4>
+                    <p>Notifica al servidor cuando un estudiante intenta abrir una app o web bloqueada.</p></div>
+                <div class="feature-card">
+                    <div class="icon">🔄</div>
+                    <h4>Reconexión automática</h4>
+                    <p>Si pierde la conexión, reintenta reconectarse automáticamente.</p></div>
+            </div>
+        </section>
+
+        <!-- ── BANDEJA ── -->
+        <section id="bandeja">
+            <h2>Ícono en la bandeja del sistema</h2>
+            <p>
+                El agente aparece como un ícono en la bandeja del sistema (esquina inferior derecha
+                de la pantalla del estudiante). Al hacer clic derecho sobre él, se muestra un menú
+                con la opción de <strong>salir</strong> del agente.
+            </p>
+            <div class="callout info">
+                <div class="title">ℹ️ Visibilidad para el estudiante</div>
+                El ícono indica al estudiante que el laboratorio está siendo supervisado.
+                Se recomienda informar a los alumnos sobre el sistema de monitoreo al inicio
+                del curso, conforme a las normativas de privacidad institucionales.
+            </div>
+            <table>
+                <tr>
+                    <th>Estado del ícono</th>
+                    <th>Significado</th>
+                </tr>
+                <tr>
+                    <td>Ícono normal</td>
+                    <td>Agente activo y conectado al servidor.</td>
+                </tr>
+                <tr>
+                    <td>Ícono atenuado / sin señal</td>
+                    <td>Agente activo pero sin conexión al servidor (intentando reconectar).</td>
+                </tr>
+            </table>
+        </section>
+
+        <!-- ── COMANDOS ── -->
+        <section id="comandos">
+            <h2>Comandos que puede recibir el Agente</h2>
+            <p>El agente responde a los siguientes comandos enviados desde la consola del profesor:</p>
+            <table>
+                <tr>
+                    <th>Comando</th>
+                    <th>Efecto en el equipo del estudiante</th>
+                </tr>
+                <tr>
+                    <td><strong>Bloquear pantalla</strong></td>
+                    <td>Muestra una superposición negra con el mensaje configurado.</td>
+                </tr>
+                <tr>
+                    <td><strong>Desbloquear pantalla</strong></td>
+                    <td>Elimina la superposición y restaura la pantalla.</td>
+                </tr>
+                <tr>
+                    <td><strong>Transmitir pantalla del profesor</strong></td>
+                    <td>Abre una ventana que muestra la pantalla del docente en tiempo real.</td>
+                </tr>
+                <tr>
+                    <td><strong>Presentar pantalla de alumno</strong></td>
+                    <td>Muestra la pantalla de un compañero en una ventana.</td>
+                </tr>
+                <tr>
+                    <td><strong>Control remoto</strong></td>
+                    <td>Acepta y ejecuta eventos de teclado/ratón del profesor.</td>
+                </tr>
+                <tr>
+                    <td><strong>Apagar</strong></td>
+                    <td>Inicia el apagado del equipo tras el delay indicado.</td>
+                </tr>
+                <tr>
+                    <td><strong>Reiniciar</strong></td>
+                    <td>Inicia el reinicio del equipo tras el delay indicado.</td>
+                </tr>
+                <tr>
+                    <td><strong>Bloquear estación</strong></td>
+                    <td>Ejecuta el bloqueo de pantalla del SO Windows.</td>
+                </tr>
+                <tr>
+                    <td><strong>Cerrar sesión</strong></td>
+                    <td>Cierra la sesión del usuario activo.</td>
+                </tr>
+                <tr>
+                    <td><strong>Abrir URL</strong></td>
+                    <td>Abre la URL indicada en el navegador predeterminado.</td>
+                </tr>
+                <tr>
+                    <td><strong>Ejecutar app</strong></td>
+                    <td>Lanza el ejecutable indicado con los argumentos especificados.</td>
+                </tr>
+                <tr>
+                    <td><strong>Enviar archivo</strong></td>
+                    <td>Guarda el documento recibido en el Escritorio del usuario.</td>
+                </tr>
+            </table>
+        </section>
+
+        <!-- ── POLÍTICAS ── -->
+        <section id="politicas">
+            <h2>Políticas de aplicaciones y web</h2>
+
+            <h3>Política de aplicaciones</h3>
+            <p>
+                Cuando el profesor activa una política de aplicaciones, el agente monitorea
+                continuamente los procesos en ejecución.
+            </p>
+            <table>
+                <tr>
+                    <th>Modo</th>
+                    <th>Comportamiento del agente</th>
+                </tr>
+                <tr>
+                    <td><span class="badge green">Sin restricciones</span></td>
+                    <td>No monitorea ni cierra aplicaciones.</td>
+                </tr>
+                <tr>
+                    <td><span class="badge orange">Lista Blanca</span></td>
+                    <td>Cierra cualquier proceso que <strong>no esté</strong> en la lista permitida.</td>
+                </tr>
+                <tr>
+                    <td><span class="badge red">Lista Negra</span></td>
+                    <td>Cierra cualquier proceso que <strong>sí esté</strong> en la lista prohibida.</td>
+                </tr>
+            </table>
+            <p>
+                Cuando el agente cierra un proceso, reporta la violación al servidor (visible en el
+                log de políticas de la consola del profesor).
+            </p>
+
+            <h3>Política web</h3>
+            <p>
+                El agente modifica el archivo <code>hosts</code> del sistema para bloquear dominios.
+            </p>
+            <table>
+                <tr>
+                    <th>Modo</th>
+                    <th>Comportamiento del agente</th>
+                </tr>
+                <tr>
+                    <td><span class="badge green">Sin restricciones</span></td>
+                    <td>El archivo hosts no se modifica.</td>
+                </tr>
+                <tr>
+                    <td><span class="badge red">Bloquear todo</span></td>
+                    <td>Redirige todos los dominios a <code>0.0.0.0</code> en el archivo hosts.</td>
+                </tr>
+                <tr>
+                    <td><span class="badge orange">Lista blanca de URLs</span></td>
+                    <td>Bloquea todos los dominios excepto los de la lista permitida.</td>
+                </tr>
+            </table>
+            <p>
+                El agente crea un backup automático del archivo hosts en
+                <code>C:\Windows\System32\drivers\etc\hosts.dlslab.bak</code> antes de aplicar
+                cualquier cambio, y lo restaura al limpiar la política.
+            </p>
+
+            <div class="callout warn">
+                <div class="title">⚠️ Requiere Administrador</div>
+                La modificación del archivo hosts requiere que el agente se ejecute con permisos de
+                <strong>Administrador</strong>. Si la política web no funciona, verifica el nivel de
+                ejecución de la tarea programada.
+            </div>
+        </section>
+
+        <!-- ── WOL ── -->
+        <section id="wol">
+            <h2>Wake-on-LAN</h2>
+            <p>
+                El agente reporta la dirección MAC de la tarjeta de red al servidor al conectarse.
+                Esta información se almacena en el servidor para poder enviar paquetes WoL cuando
+                el equipo esté apagado.
+            </p>
+
+            <h3>Habilitar WoL en los equipos del laboratorio</h3>
+            <ol class="steps">
+                <li>
+                    <strong>En la BIOS/UEFI:</strong> Busca la opción <em>Wake on LAN</em>,
+                    <em>Power On By PCI-E</em> o similar y actívala.
+                </li>
+                <li>
+                    <strong>En Windows:</strong> Abre el Administrador de dispositivos →
+                    Adaptadores de red → doble clic en la NIC → pestaña Administración de energía →
+                    marca <em>"Permitir que este dispositivo active el equipo"</em>.
+                </li>
+                <li>
+                    El equipo debe haberse conectado al menos una vez al servidor para registrar su MAC.
+                </li>
+            </ol>
+
+            <div class="callout info">
+                <div class="title">ℹ️ Limitaciones de WoL</div>
+                <ul>
+                    <li>Generalmente solo funciona en <strong>redes cableadas</strong>.</li>
+                    <li>El router/switch debe estar en el mismo segmento de red (no funciona entre VLANs sin
+                        configuración especial).
+                    </li>
+                    <li>Algunos equipos pierden la configuración WoL tras actualizaciones de drivers.</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- ── PROCEDIMIENTOS ── -->
+        <section id="procedimientos">
+            <h2>Procedimientos paso a paso</h2>
+
+            <h3>▶ Actualizar la dirección del servidor</h3>
+            <ol class="steps">
+                <li>Abre el Bloc de notas <strong>como Administrador</strong>.</li>
+                <li>Abre el archivo <code>C:\ProgramData\DLSlab\config.ini</code>.</li>
+                <li>Cambia el valor de <code>host</code> a la nueva IP del profesor.</li>
+                <li>Guarda el archivo.</li>
+                <li>Reinicia el equipo o la tarea programada del agente.</li>
+            </ol>
+
+            <h3>▶ Reiniciar el Agente manualmente</h3>
+            <ol class="steps">
+                <li>Abre el Programador de tareas (<code>taskschd.msc</code>).</li>
+                <li>Busca la tarea <em>DLSlab Agent</em>.</li>
+                <li>Haz clic derecho → <em>Ejecutar</em>.</li>
+            </ol>
+
+            <h3>▶ Verificar que el Agente está corriendo</h3>
+            <ol class="steps">
+                <li>Busca el ícono de DLSlab en la bandeja del sistema.</li>
+                <li>Alternativamente, abre el Administrador de tareas (<kbd>Ctrl+Shift+Esc</kbd>)
+                    y busca <em>DLSlab_Agent.exe</em> en la lista de procesos.
+                </li>
+            </ol>
+
+            <h3>▶ Probar conectividad con el servidor</h3>
+            <pre><code># Desde el equipo del estudiante, verificar que el servidor responde:
+Test-NetConnection -ComputerName 192.168.1.100 -Port 9000</code></pre>
+            <p>Si el resultado muestra <code>TcpTestSucceeded : True</code>, la conexión es posible.</p>
+        </section>
+
+        <!-- ── FAQ ── -->
+        <section id="faq">
+            <h2>Preguntas frecuentes</h2>
+
+            <details>
+                <summary>¿El Agente afecta el rendimiento del equipo?</summary>
+                <div class="faq-body">
+                    <p>El impacto es mínimo. Las capturas de pantalla se comprimen a baja resolución
+                        (320×180 px, calidad JPEG 40%) y se envían cada 2 segundos. El uso de CPU y memoria
+                        es muy bajo en condiciones normales.</p>
+                </div>
+            </details>
+
+            <details>
+                <summary>¿Los estudiantes pueden cerrar el Agente?</summary>
+                <div class="faq-body">
+                    <p>El Agente se ejecuta con privilegios de administrador. Un estudiante con cuenta
+                        estándar no puede cerrarlo ni eliminarlo. Solo un usuario administrador puede detenerlo
+                        desde la bandeja del sistema o el Administrador de tareas.</p>
+                </div>
+            </details>
+
+            <details>
+                <summary>¿Qué pasa si el equipo pierde la conexión con el servidor?</summary>
+                <div class="faq-body">
+                    <p>El agente detecta la desconexión y reintenta la conexión automáticamente usando
+                        espera exponencial (comienza en pocos segundos y va aumentando el intervalo hasta
+                        reconectarse). No requiere intervención manual.</p>
+                </div>
+            </details>
+
+            <details>
+                <summary>¿Las políticas web siguen activas si el servidor se cae?</summary>
+                <div class="faq-body">
+                    <p>Sí. Una vez aplicada la política web (modificación del archivo hosts), permanece
+                        activa aunque el agente pierda la conexión. El profesor debe enviar el comando
+                        "Limpiar políticas" para restaurar el archivo hosts original.</p>
+                </div>
+            </details>
+
+            <details>
+                <summary>¿El agente funciona con usuarios estándar (no administradores)?</summary>
+                <div class="faq-body">
+                    <p>El agente se ejecuta correctamente con usuarios estándar para la mayoría de
+                        funciones (miniaturas, bloqueo de pantalla, transmisión). Sin embargo, las
+                        <strong>políticas web requieren permisos de administrador</strong>. Se recomienda
+                        configurar la tarea programada con nivel de ejecución elevado.</p>
+                </div>
+            </details>
+
+            <details>
+                <summary>¿Cómo sé que el agente está conectado al servidor?</summary>
+                <div class="faq-body">
+                    <p>Si el agente está conectado, la miniatura del equipo aparece activa (punto verde)
+                        en la consola del profesor. También puedes usar el Programador de tareas para ver
+                        el estado de la tarea <em>DLSlab Agent</em>.</p>
+                </div>
+            </details>
+
+            <details>
+                <summary>¿Puedo instalar el agente en equipos fuera del laboratorio (WiFi)?</summary>
+                <div class="faq-body">
+                    <p>Sí, mientras el equipo esté en la misma red local que el servidor y pueda alcanzar
+                        el puerto 9000. Wake-on-LAN no funcionará en WiFi, pero el resto de funciones sí.</p>
+                </div>
+            </details>
+        </section>
+
+        <!-- ── TROUBLESHOOTING ── -->
+        <section id="troubleshooting">
+            <h2>Solución de problemas</h2>
+
+            <h3>El agente no aparece en la consola del profesor</h3>
+            <ul>
+                <li>Verifica que <code>DLSlab_Agent.exe</code> está en ejecución (Administrador de tareas).</li>
+                <li>Comprueba que <code>config.ini</code> tiene la IP correcta del servidor.</li>
+                <li>Ejecuta en PowerShell: <code>Test-NetConnection -ComputerName [IP_PROFESOR] -Port 9000</code></li>
+                <li>Verifica que el Firewall del PC del <strong>profesor</strong> permite el puerto 9000 TCP.</li>
+            </ul>
+
+            <h3>Las políticas web no se aplican</h3>
+            <ul>
+                <li>Confirma que el agente tiene permisos de Administrador en la tarea programada.</li>
+                <li>Verifica que el archivo hosts puede ser modificado:
+                    <code>C:\Windows\System32\drivers\etc\hosts</code></li>
+                <li>Algunos navegadores con DoH (DNS over HTTPS) ignoran el archivo hosts.
+                    Desactiva DoH en el navegador o usa políticas de grupo para bloquearlo.
+                </li>
+            </ul>
+
+            <h3>El agente no arranca automáticamente al iniciar sesión</h3>
+            <ul>
+                <li>Abre el Programador de tareas y verifica que la tarea <em>DLSlab Agent</em> existe
+                    y está habilitada.
+                </li>
+                <li>Revisa el historial de la tarea para ver si hay errores de ejecución.</li>
+                <li>Reinstala el agente con el instalador oficial.</li>
+            </ul>
+
+            <h3>El agente se cierra inesperadamente</h3>
+            <ul>
+                <li>Revisa el Visor de eventos de Windows (<code>eventvwr.msc</code>) →
+                    Registros de Windows → Aplicación → busca errores de <code>DLSlab_Agent</code>.
+                </li>
+                <li>Verifica que el antivirus no está bloqueando el ejecutable.</li>
+            </ul>
+
+            <h3>Restaurar el archivo hosts manualmente</h3>
+            <p>Si el archivo hosts quedó bloqueado tras un fallo, restaura el backup:</p>
+            <pre><code># En PowerShell como Administrador:
+Copy-Item "C:\Windows\System32\drivers\etc\hosts.dlslab.bak" `
+          "C:\Windows\System32\drivers\etc\hosts" -Force</code></pre>
+
+            <h3>Cómo reportar un error</h3>
+            <p>Contacta al soporte con la siguiente información:</p>
+            <ol>
+                <li>Descripción del problema y pasos para reproducirlo.</li>
+                <li>Versión de DLSlab Agent (propiedades del ejecutable).</li>
+                <li>Sistema operativo y versión de Windows.</li>
+                <li>Contenido del <code>config.ini</code> (omite datos sensibles de red si aplica).</li>
+            </ol>
+            <p>📧 <a href="mailto:ayuda@dls-lab.com">ayuda@dls-lab.com</a></p>
+        </section>
+
+        <!-- ── GLOSARIO ── -->
+        <section id="glosario">
+            <h2>Glosario</h2>
+            <table>
+                <tr>
+                    <th>Término</th>
+                    <th>Definición</th>
+                </tr>
+                <tr>
+                    <td><strong>Agente</strong></td>
+                    <td>Programa (<code>DLSlab_Agent.exe</code>) que se ejecuta en el PC del estudiante y se conecta al
+                        servidor del profesor.
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>Servidor</strong></td>
+                    <td>La Consola del Profesor (<code>DLSlab_Server.exe</code>) que recibe las conexiones y envía
+                        comandos.
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>Tarea Programada</strong></td>
+                    <td>Configuración del Programador de tareas de Windows que inicia el agente automáticamente al
+                        iniciar sesión.
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>config.ini</strong></td>
+                    <td>Archivo de configuración del agente con la dirección del servidor.</td>
+                </tr>
+                <tr>
+                    <td><strong>hosts (archivo)</strong></td>
+                    <td>Archivo del sistema usado para bloquear dominios web. Ruta: <code>C:\Windows\System32\drivers\etc\hosts</code>.
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>Wake-on-LAN (WoL)</strong></td>
+                    <td>Tecnología que permite encender un PC apagado a través de la red local enviando un "paquete
+                        mágico" a su dirección MAC.
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>MAC (dirección)</strong></td>
+                    <td>Identificador único de la tarjeta de red de un equipo, usado para WoL (formato:
+                        AA:BB:CC:DD:EE:FF).
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>Puerto 9000</strong></td>
+                    <td>Puerto TCP usado para la comunicación entre el agente y el servidor.</td>
+                </tr>
+                <tr>
+                    <td><strong>LAN</strong></td>
+                    <td>Red de área local — la red interna del laboratorio.</td>
+                </tr>
+                <tr>
+                    <td><strong>Lista Blanca</strong></td>
+                    <td>Conjunto de elementos explícitamente permitidos; todo lo demás se bloquea.</td>
+                </tr>
+                <tr>
+                    <td><strong>Lista Negra</strong></td>
+                    <td>Conjunto de elementos explícitamente prohibidos; todo lo demás se permite.</td>
+                </tr>
+                <tr>
+                    <td><strong>DoH</strong></td>
+                    <td>DNS over HTTPS — protocolo de navegadores que puede saltarse el archivo hosts. Puede requerir
+                        desactivación para políticas web.
+                    </td>
+                </tr>
+            </table>
+        </section>
+
+        <!-- ── ATAJOS ── -->
+        <section id="atajos">
+            <h2>Atajos y consejos para administradores</h2>
+            <ul>
+                <li>🚀 Usa el <strong>despliegue masivo con PowerShell</strong> para instalar en todo el laboratorio en
+                    minutos.
+                </li>
+                <li>🔄 Si cambias la IP del servidor, solo edita <code>config.ini</code> en cada equipo en
+                    %Programdata%/dlslab/ — no hace falta reinstalar.
+                </li>
+                <li>🔒 Configura las cuentas de los estudiantes como <strong>usuarios estándar</strong> para evitar que
+                    modifiquen o detengan el agente.
+                </li>
+                <li>📋 Revisa el <strong>Programador de tareas</strong> regularmente para confirmar que la tarea DLSlab
+                    Agent sigue activa en todos los equipos.
+                </li>
+                <li>🖥️ Si usas imágenes del sistema (clonación), instala el agente <strong>después de clonar</strong>
+                    para que cada equipo tenga su propio <code>client-id</code> automático.
+                </li>
+                <li>⚡ Habilita WoL en BIOS y NIC <strong>antes</strong> de hacer la imagen maestra del equipo.</li>
+                <li>🗂️ El backup del archivo hosts se guarda en <code>hosts.dlslab.bak</code> — guárdalo antes de
+                    cualquier cambio manual.
+                </li>
+            </ul>
+        </section>
+
+        <!-- ── SOPORTE ── -->
+        <section id="soporte">
+            <h2>Información de soporte</h2>
+            <p>Para asistencia técnica con la instalación o configuración del agente:</p>
+            <table>
+                <tr>
+                    <th>Canal</th>
+                    <th>Contacto</th>
+                </tr>
+                <tr>
+                    <td>📧 Correo electrónico</td>
+                    <td><a href="mailto:ayuda@dls-lab.com">ayuda@dls-lab.com</a></td>
+                </tr>
+            </table>
+            <p>Al contactarnos, incluye:</p>
+            <ul>
+                <li>Versión de DLSlab Agent.</li>
+                <li>Sistema operativo y versión de Windows.</li>
+                <li>Descripción del problema y pasos para reproducirlo.</li>
+                <li>Resultado del comando <code>Test-NetConnection</code> si aplica.</li>
+            </ul>
+
+            <div class="callout tip">
+                <div class="title">✅ Antes de contactar soporte</div>
+                Revisa la sección <a href="#troubleshooting">Solución de problemas</a> —
+                la mayoría de los problemas de instalación tienen solución documentada allí.
+            </div>
+        </section>
+
+        <footer>
+            DLSlab v1.0 · &copy; DLSlab · <a href="mailto:ayuda@dls-lab.com">ayuda@dls-lab.com</a>
+        </footer>
+
+    </main>
+</div>
+
+<script>
+    const sections = document.querySelectorAll('section[id]');
+    const navLinks = document.querySelectorAll('nav a[href^="#"]');
+    window.addEventListener('scroll', () => {
+        let current = '';
+        sections.forEach(s => {
+            if (window.scrollY >= s.offsetTop - 60) current = s.id;
+        });
+        navLinks.forEach(a => {
+            a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+        });
+    }, {passive: true});
+</script>
+</body>
+</html>

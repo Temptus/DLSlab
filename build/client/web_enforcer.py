@@ -4,20 +4,41 @@ client/web_enforcer.py
 Windows web access enforcer for DLSlab.
 
 Implements:
-1) Browser process blocking.
-2) URL whitelist policy via local HTTP proxy + hosts file controls.
+1) Browser process blocking (block_all mode).
+2) URL whitelist policy via a local HTTP/HTTPS proxy that is registered as
+   the Windows system proxy through the registry — so Chrome, Edge and Firefox
+   use it automatically without any per-browser configuration.
+
+Architecture
+------------
+* ``set_url_whitelist(urls)``
+    - Starts a local ``ThreadingHTTPServer`` on 127.0.0.1:8877.
+    - Saves the current Windows proxy settings.
+    - Sets the Windows registry proxy to 127.0.0.1:8877 and notifies WinINet.
+    - HTTP requests are forwarded only for allowlisted domains (403 otherwise).
+    - HTTPS CONNECT tunnels are established only for allowlisted domains.
+
+* ``clear_web_policy()``
+    - Shuts down the proxy server.
+    - Restores the previously saved Windows proxy settings.
+
+* ``block_browsers()`` (block_all mode)
+    - Blacklists all browser processes via AppEnforcer.
+    - Terminates any currently running browsers.
 """
 
 from __future__ import annotations
 
 import atexit
-import http.client
+import ctypes
 import logging
 import os
+import select
+import socket
 import threading
+import time
 from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 from urllib.parse import urlparse
 
 import psutil
@@ -39,102 +60,243 @@ BROWSER_PROCESSES: list[str] = [
     "iexplore.exe",
     "safari.exe",
 ]
+
 PROXY_HOST: str = "127.0.0.1"
 PROXY_PORT: int = 8877
-HOSTS_FILE_PATH: str = r"C:\Windows\System32\drivers\etc\hosts"
-HOSTS_BACKUP_PATH: str = r"C:\Windows\System32\drivers\etc\hosts.dlslab.bak"
-HOSTS_MARKER_START: str = "# DLSlab Web Policy Start"
-HOSTS_MARKER_END: str = "# DLSlab Web Policy End"
-COMMON_BLOCKED_DOMAINS: list[str] = [
-    "google.com",
-    "www.google.com",
-    "bing.com",
-    "www.bing.com",
-    "youtube.com",
-    "www.youtube.com",
-    "facebook.com",
-    "www.facebook.com",
-    "instagram.com",
-    "www.instagram.com",
-    "x.com",
-    "www.x.com",
-    "twitter.com",
-    "www.twitter.com",
-    "tiktok.com",
-    "www.tiktok.com",
-    "reddit.com",
-    "www.reddit.com",
-    "wikipedia.org",
-    "www.wikipedia.org",
-]
 
+_INET_SETTINGS_KEY = r"Software\Microsoft\Windows\CurrentVersion\Internet Settings"
+_INET_OPTION_SETTINGS_CHANGED = 39
+_INET_OPTION_REFRESH = 37
+
+# Seconds between repeated violation reports for the same domain (anti-spam)
+_VIOLATION_DEBOUNCE_S: float = 5.0
+
+# ---------------------------------------------------------------------------
+# Windows registry / WinINet helpers
+# ---------------------------------------------------------------------------
+
+def _read_proxy_settings() -> dict:
+    """Return the current Windows proxy settings from HKCU registry."""
+    if os.name != "nt":
+        return {}
+    try:
+        import winreg
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, _INET_SETTINGS_KEY, 0, winreg.KEY_READ)
+
+        def _get(name: str, default):
+            try:
+                val, _ = winreg.QueryValueEx(key, name)
+                return val
+            except FileNotFoundError:
+                return default
+
+        result = {
+            "ProxyEnable":   _get("ProxyEnable",   0),
+            "ProxyServer":   _get("ProxyServer",   ""),
+            "ProxyOverride": _get("ProxyOverride", ""),
+        }
+        winreg.CloseKey(key)
+        return result
+    except Exception as exc:
+        logger.warning("_read_proxy_settings failed: %s", exc)
+        return {}
+
+
+def _write_proxy_settings(settings: dict) -> None:
+    """Write a proxy settings dict back to HKCU registry and refresh WinINet."""
+    if os.name != "nt" or not settings:
+        return
+    try:
+        import winreg
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, _INET_SETTINGS_KEY, 0, winreg.KEY_WRITE)
+        winreg.SetValueEx(key, "ProxyEnable",   0, winreg.REG_DWORD, settings.get("ProxyEnable",   0))
+        winreg.SetValueEx(key, "ProxyServer",   0, winreg.REG_SZ,    settings.get("ProxyServer",   ""))
+        winreg.SetValueEx(key, "ProxyOverride", 0, winreg.REG_SZ,    settings.get("ProxyOverride", ""))
+        winreg.CloseKey(key)
+        _refresh_wininet()
+    except Exception as exc:
+        logger.warning("_write_proxy_settings failed: %s", exc)
+
+
+def _enable_system_proxy(host: str, port: int) -> None:
+    """Point the Windows system proxy to host:port and enable it."""
+    if os.name != "nt":
+        return
+    try:
+        import winreg
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, _INET_SETTINGS_KEY, 0, winreg.KEY_WRITE)
+        winreg.SetValueEx(key, "ProxyEnable",   0, winreg.REG_DWORD, 1)
+        winreg.SetValueEx(key, "ProxyServer",   0, winreg.REG_SZ,    f"{host}:{port}")
+        winreg.SetValueEx(key, "ProxyOverride", 0, winreg.REG_SZ,    "<local>")
+        winreg.CloseKey(key)
+        _refresh_wininet()
+        logger.info("Windows system proxy → %s:%d", host, port)
+    except Exception as exc:
+        logger.warning("_enable_system_proxy failed: %s", exc)
+
+
+def _disable_system_proxy() -> None:
+    """Disable the Windows system proxy."""
+    if os.name != "nt":
+        return
+    try:
+        import winreg
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, _INET_SETTINGS_KEY, 0, winreg.KEY_WRITE)
+        winreg.SetValueEx(key, "ProxyEnable", 0, winreg.REG_DWORD, 0)
+        winreg.CloseKey(key)
+        _refresh_wininet()
+        logger.info("Windows system proxy disabled.")
+    except Exception as exc:
+        logger.warning("_disable_system_proxy failed: %s", exc)
+
+
+def _refresh_wininet() -> None:
+    """Notify WinINet (and therefore all browsers) that proxy settings changed."""
+    try:
+        ctypes.windll.wininet.InternetSetOptionW(None, _INET_OPTION_SETTINGS_CHANGED, None, 0)
+        ctypes.windll.wininet.InternetSetOptionW(None, _INET_OPTION_REFRESH,          None, 0)
+    except Exception as exc:
+        logger.debug("_refresh_wininet failed: %s", exc)
+
+
+# ---------------------------------------------------------------------------
+# Proxy request handler
+# ---------------------------------------------------------------------------
 
 class _WhitelistProxyHandler(BaseHTTPRequestHandler):
-    """HTTP proxy handler that only allows configured domains."""
+    """HTTP/HTTPS proxy that enforces a domain whitelist.
+
+    * HTTPS (CONNECT): establishes a raw TCP tunnel to the remote server if
+      the domain is allowed; returns 403 otherwise.
+    * HTTP (GET/HEAD/POST): forwards the request if the domain is allowed;
+      returns 403 otherwise.
+    """
 
     server: "_WhitelistProxyServer"
 
-    def do_GET(self) -> None:  # noqa: N802
-        self._forward_request("GET")
-
-    def do_HEAD(self) -> None:  # noqa: N802
-        self._forward_request("HEAD")
+    # ------------------------------------------------------------------ HTTPS
 
     def do_CONNECT(self) -> None:  # noqa: N802
-        domain = self.path.split(":", 1)[0].lower()
+        """HTTPS tunnel — allow only whitelisted domains."""
+        host_port = self.path                            # e.g. "example.com:443"
+        domain    = host_port.split(":", 1)[0].lower()
+        try:
+            port = int(host_port.split(":", 1)[1]) if ":" in host_port else 443
+        except ValueError:
+            port = 443
+
         if self.server.get_allowed_domain(domain) is None:
             self.server.report_violation(domain)
-        self.send_error(403, "HTTPS proxy tunneling is blocked by policy.")
-
-    def _forward_request(self, method: str) -> None:
-        parsed = urlparse(self.path)
-        if parsed.scheme and parsed.scheme.lower() != "http":
-            self.send_error(403, "Only HTTP URLs are supported by policy proxy.")
+            self.send_error(403, "Blocked by DLSlab web policy.")
             return
 
+        # Open a raw TCP connection to the real server
+        try:
+            remote = socket.create_connection((domain, port), timeout=10)
+        except OSError as exc:
+            logger.debug("CONNECT to %s:%d failed: %s", domain, port, exc)
+            self.send_error(502, "Cannot connect to remote host.")
+            return
+
+        # Tell the browser the tunnel is open, then relay TLS bytes
+        self.send_response(200, "Connection Established")
+        self.end_headers()
+        self._relay(self.connection, remote)
+
+    # ------------------------------------------------------------------- HTTP
+
+    def do_GET(self) -> None:   # noqa: N802
+        self._forward_http("GET")
+
+    def do_HEAD(self) -> None:  # noqa: N802
+        self._forward_http("HEAD")
+
+    def do_POST(self) -> None:  # noqa: N802
+        self._forward_http("POST")
+
+    # ---------------------------------------------------------------- helpers
+
+    def _forward_http(self, method: str) -> None:
+        import http.client
+
+        parsed = urlparse(self.path)
         if parsed.scheme:
             domain = (parsed.hostname or "").lower()
-            path = parsed.path or "/"
+            path   = parsed.path or "/"
             if parsed.query:
                 path = f"{path}?{parsed.query}"
         else:
             host_header = self.headers.get("Host", "")
             domain = host_header.split(":", 1)[0].lower()
-            path = self.path or "/"
+            path   = self.path or "/"
 
         if not path.startswith("/"):
             path = "/" + path
 
-        allowed_domain = self.server.get_allowed_domain(domain)
-        if not domain or allowed_domain is None:
+        allowed = self.server.get_allowed_domain(domain)
+        if not domain or allowed is None:
             if domain:
                 self.server.report_violation(domain)
             self.send_error(403, "Blocked by DLSlab web policy.")
             return
 
         try:
-            connection = http.client.HTTPConnection(allowed_domain, timeout=8)
-            connection.request(method, path)
-            response = connection.getresponse()
-            body = response.read()
-            self.send_response(response.status)
-            self.send_header("Content-Type", "application/octet-stream")
-            self.send_header("Content-Length", str(len(body)))
+            content_length = int(self.headers.get("Content-Length", 0) or 0)
+            body = self.rfile.read(content_length) if content_length > 0 else None
+
+            conn = http.client.HTTPConnection(allowed, timeout=8)
+            conn.request(method, path, body=body)
+            resp      = conn.getresponse()
+            resp_body = resp.read()
+            conn.close()
+
+            self.send_response(resp.status)
+            self.send_header("Content-Type",   resp.getheader("Content-Type", "application/octet-stream"))
+            self.send_header("Content-Length", str(len(resp_body)))
             self.end_headers()
             if method != "HEAD":
-                self.wfile.write(body)
-            connection.close()
+                self.wfile.write(resp_body)
         except Exception as exc:
-            logger.debug("Proxy forward failed for domain=%s path=%s: %s", allowed_domain, path, exc)
+            logger.debug("HTTP forward failed %s%s: %s", allowed, path, exc)
             self.send_error(502, "Proxy forwarding error.")
 
+    @staticmethod
+    def _relay(client: socket.socket, remote: socket.socket) -> None:
+        """Bidirectional raw relay for the HTTPS tunnel."""
+        socks = [client, remote]
+        try:
+            while True:
+                readable, _, error = select.select(socks, [], socks, 60)
+                if error or not readable:
+                    break
+                for sock in readable:
+                    try:
+                        data = sock.recv(65536)
+                    except OSError:
+                        return
+                    if not data:
+                        return
+                    other = remote if sock is client else client
+                    try:
+                        other.sendall(data)
+                    except OSError:
+                        return
+        finally:
+            try:
+                remote.close()
+            except OSError:
+                pass
+
     def log_message(self, format: str, *args: object) -> None:  # noqa: A003
-        """Silence default HTTP server logging."""
         logger.debug("Proxy: " + format, *args)
 
 
+# ---------------------------------------------------------------------------
+# Proxy server
+# ---------------------------------------------------------------------------
+
 class _WhitelistProxyServer(ThreadingHTTPServer):
-    """Proxy server with domain whitelist and violation callback."""
+    """ThreadingHTTPServer that carries the allowlist and violation callback."""
 
     def __init__(
         self,
@@ -144,11 +306,14 @@ class _WhitelistProxyServer(ThreadingHTTPServer):
         on_violation: Callable[[str, str], None] | None,
     ) -> None:
         self._allowed_domains = {d.lower() for d in allowed_domains}
-        self._on_violation = on_violation
+        self._on_violation    = on_violation
+        self._recent: dict[str, float] = {}
+        self._recent_lock = threading.Lock()
         super().__init__((host, port), _WhitelistProxyHandler)
 
     def get_allowed_domain(self, domain: str) -> str | None:
-        """Return canonical allowlisted domain if *domain* is permitted."""
+        """Return the canonical allowlisted entry if *domain* is permitted."""
+        domain = domain.lower()
         if domain in self._allowed_domains:
             return domain
         for allowed in self._allowed_domains:
@@ -157,44 +322,58 @@ class _WhitelistProxyServer(ThreadingHTTPServer):
         return None
 
     def report_violation(self, domain: str) -> None:
-        """Emit a policy-violation callback for blocked domain access."""
+        """Call the violation callback, deduplicating within ``_VIOLATION_DEBOUNCE_S``."""
+        now = time.monotonic()
+        with self._recent_lock:
+            if now - self._recent.get(domain, 0.0) < _VIOLATION_DEBOUNCE_S:
+                return
+            self._recent[domain] = now
         if self._on_violation:
             self._on_violation(domain, "web_whitelist")
 
 
+# ---------------------------------------------------------------------------
+# Public WebEnforcer
+# ---------------------------------------------------------------------------
+
 class WebEnforcer:
-    """Apply web access policies on a Windows client."""
+    """Apply web-access policies on a Windows student machine."""
 
     def __init__(
         self,
         app_enforcer: AppEnforcer | None = None,
         on_violation: Callable[[str, str], None] | None = None,
     ) -> None:
-        self._app_enforcer = app_enforcer
-        self._on_violation = on_violation
-        self._proxy_server: _WhitelistProxyServer | None = None
-        self._proxy_thread: threading.Thread | None = None
+        self._app_enforcer    = app_enforcer
+        self._on_violation    = on_violation
+        self._proxy_server:   _WhitelistProxyServer | None = None
+        self._proxy_thread:   threading.Thread | None = None
         self._allowed_domains: set[str] = set()
         self._saved_app_policy: tuple[str | None, list[str], bool] | None = None
-        atexit.register(self._restore_hosts_backup)
+        self._saved_proxy: dict = {}
+        atexit.register(self.clear_web_policy)
+
+    # ---------------------------------------------------------------- properties
 
     @property
     def is_active(self) -> bool:
-        """Return ``True`` when a web policy is active."""
         proxy_active = self._proxy_thread is not None and self._proxy_thread.is_alive()
         return proxy_active or self._saved_app_policy is not None
 
+    # ---------------------------------------------------------------- lifecycle
+
     def start(self) -> None:
-        """Start the web enforcer (no-op; policies activate methods directly)."""
-        logger.debug("Web enforcer start called.")
+        logger.debug("WebEnforcer.start() — no-op.")
 
     def stop(self) -> None:
-        """Stop all web restrictions."""
         self.clear_web_policy()
 
+    # ---------------------------------------------------------------- block_all
+
     def block_browsers(self) -> None:
-        """Block all known browsers by killing their processes and blacklisting them."""
+        """Kill all browser processes and blacklist them via AppEnforcer."""
         browsers = [name.lower() for name in BROWSER_PROCESSES]
+
         if self._app_enforcer and self._saved_app_policy is None:
             self._saved_app_policy = (
                 self._app_enforcer.mode,
@@ -212,40 +391,60 @@ class WebEnforcer:
                 self._app_enforcer.set_blacklist(browsers)
             self._app_enforcer.start()
 
-        for process in psutil.process_iter(attrs=["pid", "name"]):
-            name = (process.info.get("name") or "").lower()
+        for proc in psutil.process_iter(attrs=["pid", "name"]):
+            name = (proc.info.get("name") or "").lower()
             if name not in browsers:
                 continue
             try:
-                process.terminate()
-                process.wait(timeout=1.5)
-                logger.info("Terminated browser process %s.", name)
+                proc.terminate()
+                proc.wait(timeout=1.5)
+                logger.info("Terminated browser: %s", name)
                 if self._on_violation:
                     self._on_violation(name, "block_all")
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
-                continue
+                pass
+
+    # ---------------------------------------------------------------- whitelist
 
     def set_url_whitelist(self, urls: list[str]) -> None:
-        """Allow web access only to domains extracted from *urls*."""
+        """Allow only the domains extracted from *urls*; block everything else.
+
+        1. Parse and normalise domains from the URL list (both www / non-www).
+        2. Start the local proxy server on PROXY_HOST:PROXY_PORT.
+        3. Save the current Windows proxy settings.
+        4. Register the proxy in the Windows registry and notify WinINet so
+           Chrome, Edge and Firefox start routing through it immediately.
+        """
         self._allowed_domains = self._extract_domains(urls)
         if not self._allowed_domains:
-            logger.warning("URL whitelist received empty domain set.")
+            logger.warning("set_url_whitelist: empty domain list — not applied.")
             return
 
         self._start_proxy()
-        self._apply_hosts_policy(self._allowed_domains)
+        self._saved_proxy = _read_proxy_settings()
+        _enable_system_proxy(PROXY_HOST, PROXY_PORT)
+
         logger.info(
-            "Web URL whitelist active on %s:%d for %d domain(s).",
-            PROXY_HOST,
-            PROXY_PORT,
+            "Web whitelist active — proxy %s:%d — %d domain(s): %s",
+            PROXY_HOST, PROXY_PORT,
             len(self._allowed_domains),
+            ", ".join(sorted(self._allowed_domains)),
         )
 
+    # ---------------------------------------------------------------- clear
+
     def clear_web_policy(self) -> None:
-        """Clear all web restrictions and restore original settings."""
+        """Remove all web restrictions and restore the previous proxy settings."""
         self._stop_proxy()
-        self._restore_hosts_backup()
+
+        if self._saved_proxy:
+            _write_proxy_settings(self._saved_proxy)
+            self._saved_proxy = {}
+        else:
+            _disable_system_proxy()
+
         self._allowed_domains.clear()
+
         if self._app_enforcer and self._saved_app_policy is not None:
             mode, apps, was_active = self._saved_app_policy
             if mode == "whitelist":
@@ -260,8 +459,9 @@ class WebEnforcer:
                 self._app_enforcer.stop()
             self._saved_app_policy = None
 
+    # ---------------------------------------------------------------- internals
+
     def _start_proxy(self) -> None:
-        """Start the local whitelist proxy."""
         self._stop_proxy()
         self._proxy_server = _WhitelistProxyServer(
             host=PROXY_HOST,
@@ -277,7 +477,6 @@ class WebEnforcer:
         self._proxy_thread.start()
 
     def _stop_proxy(self) -> None:
-        """Stop the local whitelist proxy if it is running."""
         if self._proxy_server:
             self._proxy_server.shutdown()
             self._proxy_server.server_close()
@@ -286,52 +485,25 @@ class WebEnforcer:
         self._proxy_server = None
         self._proxy_thread = None
 
-    def _apply_hosts_policy(self, allowed_domains: set[str]) -> None:
-        """Write DLSlab policy block entries to hosts file."""
-        if os.name != "nt":
-            logger.warning("Hosts policy changes are only supported on Windows.")
-            return
-
-        hosts_path = Path(HOSTS_FILE_PATH)
-        backup_path = Path(HOSTS_BACKUP_PATH)
-
-        if not backup_path.exists():
-            backup_path.write_text(hosts_path.read_text(encoding="utf-8"), encoding="utf-8")
-
-        original = backup_path.read_text(encoding="utf-8")
-        blocked_domains = [
-            d for d in COMMON_BLOCKED_DOMAINS if d.lower() not in allowed_domains
-        ]
-        entries = "\n".join(f"127.0.0.1 {domain}" for domain in blocked_domains)
-        content = (
-            f"{original.rstrip()}\n\n"
-            f"{HOSTS_MARKER_START}\n"
-            f"{entries}\n"
-            f"{HOSTS_MARKER_END}\n"
-        )
-        hosts_path.write_text(content, encoding="utf-8")
-
-    def _restore_hosts_backup(self) -> None:
-        """Restore the original hosts backup if present."""
-        if os.name != "nt":
-            return
-        hosts_path = Path(HOSTS_FILE_PATH)
-        backup_path = Path(HOSTS_BACKUP_PATH)
-        if backup_path.exists():
-            try:
-                hosts_path.write_text(backup_path.read_text(encoding="utf-8"), encoding="utf-8")
-            except OSError as exc:
-                logger.warning("Failed restoring hosts file: %s", exc)
-
     @staticmethod
     def _extract_domains(urls: list[str]) -> set[str]:
-        """Extract normalized domains from URL list."""
+        """Parse URLs and return a set of normalised hostnames.
+
+        Both ``example.com`` and ``www.example.com`` are added automatically
+        so teachers don't need to type both variants.
+        """
         domains: set[str] = set()
-        for raw_url in urls:
-            url = raw_url.strip()
+        for raw in urls:
+            url = raw.strip()
             if not url:
                 continue
             parsed = urlparse(url if "://" in url else f"https://{url}")
-            if parsed.hostname:
-                domains.add(parsed.hostname.lower())
+            host = (parsed.hostname or "").lower()
+            if not host:
+                continue
+            domains.add(host)
+            if host.startswith("www."):
+                domains.add(host[4:])
+            else:
+                domains.add(f"www.{host}")
         return domains

@@ -1,11 +1,19 @@
 # server.spec
+import os
 block_cipher = None
 
+# SPECPATH apunta al directorio del spec (build\).
+# Usamos el directorio padre para referenciar el resto del proyecto.
+_root = os.path.abspath(os.path.join(SPECPATH, '..'))
+
 a = Analysis(
-    ['server/main_server.py'],
-    pathex=['.'],
+    [os.path.join(_root, 'ui', 'main_window.py')],  # Entry point real: GUI del profesor
+    pathex=[_root],
     binaries=[],
-    datas=[],
+    datas=[
+        (os.path.join(_root, 'icon.png'), '.'),
+        (os.path.join(_root, 'docs'), 'docs'),
+    ],
     hiddenimports=[
         'PyQt6',
         'PyQt6.QtWidgets',
@@ -17,6 +25,9 @@ a = Analysis(
         'asyncio',
         'wakeonlan',
         'psutil',
+        'qt_material',
+        'qtawesome',
+        'qtawesome.iconic_font',
     ],
     hookspath=[],
     hooksconfig={},
@@ -43,7 +54,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,        # Sin ventana de consola (GUI app)
@@ -53,5 +64,5 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     uac_admin=False,      # El servidor NO requiere admin
-    icon=None,
+    icon=os.path.join(_root, 'icon.ico'),
 )

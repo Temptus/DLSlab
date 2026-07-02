@@ -23,18 +23,58 @@ logger = logging.getLogger(__name__)
 
 PROCESS_SCAN_INTERVAL_SECONDS: float = 2.0
 SYSTEM_PROCESS_EXCLUSIONS: set[str] = {
+    # Kernel / Session Manager
     "System",
     "Registry",
+    "Idle",
     "smss.exe",
     "csrss.exe",
     "wininit.exe",
+    "winlogon.exe",
+    "LogonUI.exe",
+    # Servicios
     "services.exe",
     "lsass.exe",
+    "lsaiso.exe",
     "svchost.exe",
+    "spoolsv.exe",
+    "dllhost.exe",
+    "WmiPrvSE.exe",
+    "WUDFHost.exe",
+    "wermgr.exe",
+    # Shell / UI
     "explorer.exe",
+    "dwm.exe",
+    "taskhostw.exe",
+    "taskmgr.exe",
+    "sihost.exe",
+    "ShellExperienceHost.exe",
+    "StartMenuExperienceHost.exe",
+    "SearchUI.exe",
+    "SearchApp.exe",
+    "SearchIndexer.exe",
+    "ctfmon.exe",
+    "fontdrvhost.exe",
+    "UserOOBEBroker.exe",
+    # Runtime / seguridad
+    "RuntimeBroker.exe",
+    "SecurityHealthService.exe",
+    "SecurityHealthSystray.exe",
+    "MsMpEng.exe",
+    "NisSrv.exe",
+    "SgrmBroker.exe",
+    # Audio / dispositivos
+    "audiodg.exe",
+    "conhost.exe",
+    # Python (agente DLSlab)
     "python.exe",
     "pythonw.exe",
+    # Agente propio compilado con PyInstaller
+    "agent.exe",
 }
+
+# Versión en minúsculas para comparaciones case-insensitive
+SYSTEM_PROCESS_EXCLUSIONS_LOWER: set[str] = {p.lower() for p in SYSTEM_PROCESS_EXCLUSIONS}
 
 
 class AppEnforcer:
@@ -137,7 +177,7 @@ class AppEnforcer:
             process_name_l = process_name.lower()
             if process_name in SYSTEM_PROCESS_EXCLUSIONS:
                 continue
-            if process_name_l in SYSTEM_PROCESS_EXCLUSIONS:
+            if process_name_l in SYSTEM_PROCESS_EXCLUSIONS_LOWER:
                 continue
 
             should_kill = (

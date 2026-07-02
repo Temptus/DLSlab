@@ -23,11 +23,11 @@ from __future__ import annotations
 
 import base64
 import logging
-from typing import Optional
+from typing import Callable, Optional
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QColor, QFont, QPixmap
-from PyQt6.QtWidgets import QApplication, QLabel, QWidget
+from PyQt6.QtWidgets import QApplication, QLabel, QPushButton, QWidget
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,8 @@ BANNER_COLOR: str = "rgba(0, 0, 0, 160)"       # semi-transparent black
 BANNER_TEXT_COLOR: str = "#ffffff"
 BANNER_FONT_SIZE: int = 14                       # pt
 BANNER_PADDING: int = 8                          # px
+STOP_BTN_COLOR: str = "rgba(180, 30, 30, 200)"  # semi-transparent red
+STOP_BTN_HOVER_COLOR: str = "rgba(220, 50, 50, 230)"
 
 
 # ---------------------------------------------------------------------------
@@ -69,16 +71,38 @@ class StudentDisplay:
     # Public API
     # ------------------------------------------------------------------
 
-    def show(self, presenter_name: str) -> None:
+    @property
+    def frame_ready(self) -> "pyqtSignal":
+        """Thread-safe Qt signal for delivering frames from the asyncio thread.
+
+        Emitting this signal from any thread will safely schedule
+        :meth:`update_frame` on the Qt main thread.  The window is created
+        lazily on first access so the signal is always available after the
+        first :meth:`show` call.
+
+        Typical usage in the teacher UI::
+
+            display.show("PC-ALUMNO-03")
+            display.frame_ready.emit(frame_b64)   # safe from asyncio thread
+        """
+        if self._window is None:
+            self._window = _FullscreenPresenterWidget()
+        return self._window.frame_ready
+
+    def show(self, presenter_name: str, on_stop: "Callable[[], None] | None" = None) -> None:
         """Open (or raise) the fullscreen student-display window.
 
         Args:
             presenter_name: Human-readable name of the presenting student shown
                             in the banner (e.g. ``"PC-ALUMNO-03"``).
+            on_stop:        Optional callback invoked when the teacher clicks the
+                            stop button.  When ``None`` no button is shown — this
+                            is the normal behaviour for audience student clients.
         """
         if self._window is None:
             self._window = _FullscreenPresenterWidget()
         self._window.set_presenter_name(presenter_name)
+        self._window.set_stop_callback(on_stop)
         self._window.show_fullscreen()
         logger.info("StudentDisplay shown — presenter=%r", presenter_name)
 
@@ -124,6 +148,10 @@ class _FullscreenPresenterWidget(QWidget):
     in the upper-left corner indicating who is presenting.
     """
 
+    # Thread-safe signal: emit from the asyncio thread to deliver frames on
+    # the Qt main thread without explicit locking.
+    frame_ready = pyqtSignal(str)
+
     def __init__(self) -> None:
         super().__init__()
         self.setWindowFlags(
@@ -157,6 +185,50 @@ class _FullscreenPresenterWidget(QWidget):
         self._banner.setText("🖥️ … está presentando")
         self._banner.adjustSize()
 
+        # --- Stop button (upper-right corner, teacher-only) ---
+        self._stop_btn = QPushButton("⏹  Dejar de presentar", self)
+        self._stop_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        font_btn = QFont()
+        font_btn.setPointSize(BANNER_FONT_SIZE)
+        font_btn.setBold(True)
+        self._stop_btn.setFont(font_btn)
+        self._stop_btn.setStyleSheet(
+            f"QPushButton {{"
+            f"  background-color: {STOP_BTN_COLOR};"
+            f"  color: {BANNER_TEXT_COLOR};"
+            f"  border: none;"
+            f"  border-radius: 4px;"
+            f"  padding: {BANNER_PADDING}px 14px;"
+            f"}}"
+            f"QPushButton:hover {{"
+            f"  background-color: {STOP_BTN_HOVER_COLOR};"
+            f"}}"
+        )
+        self._stop_btn.adjustSize()
+        self._stop_btn.hide()  # hidden until a callback is registered
+        self._stop_callback: Callable[[], None] | None = None
+        self._stop_btn.clicked.connect(self._on_stop_clicked)
+
+        # Connect signal for thread-safe frame delivery.
+        self.frame_ready.connect(self._on_frame_ready)
+
+    def set_stop_callback(self, callback: "Callable[[], None] | None") -> None:
+        """Register (or clear) the stop-presentation callback.
+
+        When *callback* is not ``None`` a "Dejar de presentar" button is shown
+        in the upper-right corner of the window.  Passing ``None`` hides it —
+        this is the default for audience student clients.
+
+        Args:
+            callback: Function to call when the teacher clicks the stop button.
+        """
+        self._stop_callback = callback
+        if callback is not None:
+            self._stop_btn.show()
+            self._stop_btn.raise_()
+        else:
+            self._stop_btn.hide()
+
     def set_presenter_name(self, name: str) -> None:
         """Update the banner text to reflect the presenter's name.
 
@@ -181,11 +253,18 @@ class _FullscreenPresenterWidget(QWidget):
             if combined is not None:
                 self.setGeometry(combined)
                 self._label.setGeometry(0, 0, combined.width(), combined.height())
-                # Re-position banner after geometry is set.
+                # Re-position banner (top-left) and stop button (top-right).
                 margin = BANNER_PADDING
                 self._banner.move(margin, margin)
+                self._stop_btn.adjustSize()
+                self._stop_btn.move(
+                    combined.width() - self._stop_btn.width() - margin,
+                    margin,
+                )
         self.showFullScreen()
         self._banner.raise_()
+        if self._stop_btn.isVisible():
+            self._stop_btn.raise_()
 
     def set_pixmap(self, pixmap: QPixmap) -> None:
         """Update the displayed image, scaling to fill the label.
@@ -199,5 +278,34 @@ class _FullscreenPresenterWidget(QWidget):
             Qt.TransformationMode.SmoothTransformation,
         )
         self._label.setPixmap(scaled)
-        # Keep banner on top after every frame update.
+        # Keep overlay widgets on top after every frame update.
         self._banner.raise_()
+        if self._stop_btn.isVisible():
+            self._stop_btn.raise_()
+
+    @pyqtSlot()
+    def _on_stop_clicked(self) -> None:
+        """Invoke the stop callback when the teacher clicks the stop button."""
+        if self._stop_callback is not None:
+            self._stop_callback()
+
+    @pyqtSlot(str)
+    def _on_frame_ready(self, jpeg_base64: str) -> None:
+        """Decode and render a frame received via the ``frame_ready`` signal.
+
+        This slot always runs on the Qt main thread regardless of which
+        thread emitted the signal, making it safe to call from the asyncio
+        server thread.
+
+        Args:
+            jpeg_base64: Base64-encoded JPEG string.
+        """
+        try:
+            jpeg_bytes = base64.b64decode(jpeg_base64)
+            pixmap = QPixmap()
+            if not pixmap.loadFromData(jpeg_bytes, "JPEG"):
+                logger.warning("_FullscreenPresenterWidget: failed to decode JPEG frame.")
+                return
+            self.set_pixmap(pixmap)
+        except Exception as exc:
+            logger.exception("_FullscreenPresenterWidget._on_frame_ready error: %s", exc)

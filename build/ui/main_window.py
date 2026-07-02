@@ -142,10 +142,9 @@ class MainWindow(QMainWindow):
         help_menu = menu_bar.addMenu("Ayuda")
         help_action = QAction("Ayuda", self)
         help_action.setShortcut("Ctrl+H")
-        def _open_help():
-            base = pathlib.Path(sys._MEIPASS) if getattr(sys, "frozen", False) else pathlib.Path(__file__).parent.parent
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(base / "docs" / "ayuda.html")))
-        help_action.triggered.connect(_open_help)
+        help_action.triggered.connect(lambda: QDesktopServices.openUrl(
+            QUrl.fromLocalFile(str(pathlib.Path(__file__).parent.parent / "docs" / "ayuda.html"))
+        ))
         help_menu.addAction(help_action)
         help_menu.addSeparator()
         about_action = QAction("Acerca de...", self)

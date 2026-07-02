@@ -1,8 +1,13 @@
 @echo off
-REM =============================================
+REM ====================================================================
 REM  DLSlab Build Script
-REM  Genera DLSlab_Server.exe y DLSlab_Agent.exe
-REM =============================================
+REM  Fase 1: Genera DLSlab_Server.exe y DLSlab_Agent.exe con PyInstaller
+REM  Fase 2: (Opcional) Genera los instaladores .exe con Inno Setup
+REM
+REM ====================================================================
+
+REM --- Ruta al compilador de Inno Setup (ajusta si es necesario) ---
+set ISCC_PATH=C:\Program Files (x86)\Inno Setup 6\
 
 echo [DLSlab] Verificando dependencias...
 pip install pyinstaller --quiet
@@ -10,7 +15,7 @@ pip install -r requirements.txt --quiet
 
 echo.
 echo [DLSlab] Compilando DLSlab_Server.exe...
-pyinstaller build\server.spec --distpath dist --workpath build\work --noconfirm
+pyinstaller server.spec --distpath dist --workpath \work --noconfirm --clean
 if errorlevel 1 (
     echo [ERROR] Fallo al compilar el servidor.
     pause
@@ -19,7 +24,7 @@ if errorlevel 1 (
 
 echo.
 echo [DLSlab] Compilando DLSlab_Agent.exe...
-pyinstaller build\agent.spec --distpath dist --workpath build\work --noconfirm
+pyinstaller agent.spec --distpath dist --workpath \work --noconfirm --clean
 if errorlevel 1 (
     echo [ERROR] Fallo al compilar el agente.
     pause
@@ -28,8 +33,7 @@ if errorlevel 1 (
 
 echo.
 echo =============================================
-echo  BUILD EXITOSO
-echo  Archivos generados en: dist\
+echo  BUILD EXITOSO - EXEs generados en dist\
 echo    - dist\DLSlab_Server.exe
 echo    - dist\DLSlab_Agent.exe
 echo =============================================
