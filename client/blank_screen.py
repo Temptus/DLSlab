@@ -23,6 +23,19 @@ user32 = ctypes.windll.user32
 gdi32 = ctypes.windll.gdi32
 kernel32 = ctypes.windll.kernel32
 
+# PAINTSTRUCT — tamaño correcto en x64: 72 bytes.
+# Usar create_string_buffer(64) provoca desbordamiento de 8 bytes y corrupción
+# de heap, causando crashes aleatorios con código 0xc0000005 en python3XX.dll.
+class PAINTSTRUCT(ctypes.Structure):
+    _fields_ = [
+        ("hdc",          ctypes.wintypes.HDC),
+        ("fErase",       ctypes.wintypes.BOOL),
+        ("rcPaint",      ctypes.wintypes.RECT),
+        ("fRestore",     ctypes.wintypes.BOOL),
+        ("fIncUpdate",   ctypes.wintypes.BOOL),
+        ("rgbReserved",  ctypes.c_byte * 32),
+    ]
+
 # --- Declarar tipos correctos para Windows x64 ---
 user32.DefWindowProcW.restype = ctypes.c_ssize_t
 user32.DefWindowProcW.argtypes = [
@@ -119,8 +132,8 @@ class BlankScreenOverlay:
                     user32.PostQuitMessage(0)
                     return 0
                 elif msg == WM_PAINT:
-                    ps = ctypes.create_string_buffer(64)
-                    hdc = user32.BeginPaint(hwnd, ps)
+                    ps = PAINTSTRUCT()
+                    hdc = user32.BeginPaint(hwnd, ctypes.byref(ps))
                     rc = ctypes.wintypes.RECT()
                     user32.GetClientRect(hwnd, ctypes.byref(rc))
                     hbrush = gdi32.CreateSolidBrush(0x00000000)
@@ -129,7 +142,7 @@ class BlankScreenOverlay:
                     gdi32.SetTextColor(hdc, 0x00FFFFFF)
                     gdi32.SetBkMode(hdc, 1)
                     user32.DrawTextW(hdc, message, -1, ctypes.byref(rc), 0x25)
-                    user32.EndPaint(hwnd, ps)
+                    user32.EndPaint(hwnd, ctypes.byref(ps))
                     return 0
                 elif msg in (WM_KEYDOWN, WM_SYSKEYDOWN, WM_MOUSEMOVE,
                              WM_LBUTTONDOWN, WM_RBUTTONDOWN):
@@ -137,6 +150,9 @@ class BlankScreenOverlay:
                 return user32.DefWindowProcW(hwnd, msg, wparam, lparam)
 
             wnd_proc_cb = WNDPROC(wnd_proc)
+            # Mantener referencia fuerte para que el GC no destruya el
+            # callback mientras Windows pueda invocarlo.
+            self._wnd_proc_cb = wnd_proc_cb
 
             class WNDCLASSW(ctypes.Structure):
                 _fields_ = [
@@ -191,6 +207,7 @@ class BlankScreenOverlay:
 
             user32.DestroyWindow(hwnd)
             user32.UnregisterClassW(class_name, hinstance)
+            self._wnd_proc_cb = None  # liberar callback solo después de destruir la ventana
             logger.info("BlankScreenOverlay: ventana nativa destruida.")
 
         except Exception as exc:
