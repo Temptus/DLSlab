@@ -120,7 +120,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(WINDOW_TITLE)
         self.resize(WINDOW_WIDTH, WINDOW_HEIGHT)
         # window_icon = self.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)
-        self.setWindowIcon(QIcon("icon.png"))
+        self.setWindowIcon(QIcon("../icon.png"))
 
         # ---- Menu bar ----
         menu_bar = self.menuBar()

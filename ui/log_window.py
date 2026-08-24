@@ -24,7 +24,7 @@ from PyQt6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
-    QWidget,
+    QWidget, QStyle,
 )
 
 # Maximum rows kept in the table before the oldest are dropped.
@@ -58,9 +58,10 @@ class PolicyLogWindow(QMainWindow):
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent, Qt.WindowType.Window)
         self._unread: int = 0
-        self.setWindowTitle("📋 Log de Violaciones de Política")
+        self.setWindowTitle("Log de Violaciones de Política")
         self.setMinimumSize(740, 420)
-        self.setWindowIcon(QIcon("../icon.png"))
+        icono = self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView)
+        self.setWindowIcon(icono)
         self._setup_ui()
 
     # ------------------------------------------------------------------

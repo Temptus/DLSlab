@@ -23,7 +23,7 @@ from PyQt6.QtWidgets import (
     QTabWidget,
     QTextEdit,
     QVBoxLayout,
-    QWidget,
+    QWidget, QStyle,
 )
 import qtawesome as qta
 
@@ -53,14 +53,15 @@ class PolicyDialog(QDialog):
         super().__init__(parent)
         self._client_ids = client_ids
         self._clear_all_requested = False
-        self.setWindowTitle("🚦 Políticas de Aplicaciones y Web")
+        self.setWindowTitle("Políticas de Aplicaciones y Web")
         self.setMinimumWidth(620)
         self.setMinimumHeight(520)
         self._setup_ui()
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
-        self.setWindowIcon(QIcon("icon.png"))
+        icono = self.style().standardIcon(QStyle.StandardPixmap.SP_VistaShield)
+        self.setWindowIcon(icono)
 
         # Icons
         icon_tab_0 = qta.icon('fa6s.desktop', color='#f44336')

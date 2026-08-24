@@ -27,7 +27,7 @@ from PyQt6.QtWidgets import (
     QRadioButton,
     QSpinBox,
     QVBoxLayout,
-    QWidget,
+    QWidget, QStyle,
 )
 import qtawesome as qta
 
@@ -76,7 +76,7 @@ class PowerDialog(QDialog):
         self._on_wol_all = on_wol_all
         self._on_wol_manual = on_wol_manual
 
-        self.setWindowTitle("⚡ Control de Energía")
+        self.setWindowTitle("Control de Energía")
         self.setMinimumWidth(720)
         self.setMinimumHeight(900)
         self._setup_ui()
@@ -84,14 +84,15 @@ class PowerDialog(QDialog):
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
-        self.setWindowIcon(QIcon("icon.png"))
+        icono = self.style().standardIcon(QStyle.StandardPixmap.SP_DialogNoButton)
+        self.setWindowIcon(icono)
 
         layout.addWidget(self._build_power_section())
         layout.addWidget(self._build_remote_exec_section())
         layout.addWidget(self._build_wol_section())
 
     def _build_power_section(self) -> QGroupBox:
-        box = QGroupBox("⚡ Control de Energía")
+        box = QGroupBox("Control de Energía")
         layout = QVBoxLayout(box)
 
         # Icons
