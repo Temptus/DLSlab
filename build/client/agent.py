@@ -851,7 +851,7 @@ class DLSlabAgent:
         while True:
             t0 = _time.monotonic()
 
-            image_b64 = hires_capture.capture()
+            image_b64 = hires_capture.capture_with_cursor()
             if image_b64:
                 msg = Message(
                     type=MessageType.SCREENSHOT,
